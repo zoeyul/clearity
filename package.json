@@ -1,0 +1,21 @@
+{
+  "name": "clearity",
+  "private": true,
+  "scripts": {
+    "dev": "turbo dev",
+    "build": "turbo build",
+    "lint": "turbo lint",
+    "dev:web": "turbo dev --filter=@clearity/web",
+    "dev:desktop": "turbo dev --filter=@clearity/desktop",
+    "build:web": "turbo build --filter=@clearity/web",
+    "build:desktop": "turbo build --filter=@clearity/desktop",
+    "build:mobile": "turbo build --filter=@clearity/mobile"
+  },
+  "devDependencies": {
+    "turbo": "^2.3.0"
+  },
+  "packageManager": "pnpm@9.15.0",
+  "engines": {
+    "node": ">=20"
+  }
+}

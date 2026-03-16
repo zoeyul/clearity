@@ -1,0 +1,22 @@
+{
+  "$schema": "https://raw.githubusercontent.com/tauri-apps/tauri/dev/crates/tauri-config-schema/schema.json",
+  "productName": "Clearity",
+  "version": "0.0.0",
+  "identifier": "com.clearity.app",
+  "build": {
+    "frontendDist": "../../web/out",
+    "devUrl": "http://localhost:3000",
+    "beforeDevCommand": "pnpm --filter @clearity/web dev",
+    "beforeBuildCommand": "pnpm --filter @clearity/web build"
+  },
+  "app": {
+    "title": "Clearity",
+    "windows": [
+      {
+        "title": "Clearity",
+        "width": 1200,
+        "height": 800
+      }
+    ]
+  }
+}
