@@ -52,7 +52,7 @@ export function ReflectionDashboard() {
 
   if (dashboard.isLoading) {
     return (
-      <div className="flex h-screen w-full items-center justify-center bg-[#f0f4f4] dark:bg-[#1a1d1d]">
+      <div className="flex h-screen w-full items-center justify-center bg-[#edf0f5] dark:bg-[#1a1d1d]">
         <div className="flex flex-col items-center gap-3">
           <div className="glass-solid flex h-12 w-12 items-center justify-center !rounded-2xl animate-pulse">
             <Sparkles className="h-6 w-6 text-white" />
@@ -66,10 +66,10 @@ export function ReflectionDashboard() {
   return (
     <div className="relative flex h-screen w-full overflow-hidden">
       {/* Background — identical to chat page */}
-      <div className="absolute inset-0 bg-[#f0f4f4] dark:bg-[#1a1d1d]" />
-      <div className="absolute -top-[20%] left-[10%] h-[60%] w-[50%] rounded-full bg-[#d0e4e4]/50 blur-[120px] dark:bg-[#2a4040]/20" />
-      <div className="absolute -bottom-[15%] right-[5%] h-[50%] w-[40%] rounded-full bg-[#c8dede]/45 blur-[120px] dark:bg-[#253838]/15" />
-      <div className="absolute top-[30%] left-[40%] h-[40%] w-[35%] rounded-full bg-[#dceaea]/60 blur-[100px] dark:bg-[#2d4242]/15" />
+      <div className="absolute inset-0 bg-[#edf0f5] dark:bg-[#1a1d1d]" />
+      <div className="absolute -top-[20%] left-[10%] h-[60%] w-[50%] rounded-full bg-[#d4dff0]/50 blur-[120px] dark:bg-[#2a3040]/20" />
+      <div className="absolute -bottom-[15%] right-[5%] h-[50%] w-[40%] rounded-full bg-[#dde3ed]/45 blur-[120px] dark:bg-[#252d38]/15" />
+      <div className="absolute top-[30%] left-[40%] h-[40%] w-[35%] rounded-full bg-[#e5eaf2]/60 blur-[100px] dark:bg-[#2d3342]/15" />
       <div className="absolute inset-0 opacity-[0.02] dark:opacity-[0.03]" style={{ backgroundImage: `url("data:image/svg+xml,%3Csvg viewBox='0 0 256 256' xmlns='http://www.w3.org/2000/svg'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.9' numOctaves='4' stitchTiles='stitch'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23n)'/%3E%3C/svg%3E")` }} />
 
       {/* 2-column layout */}
