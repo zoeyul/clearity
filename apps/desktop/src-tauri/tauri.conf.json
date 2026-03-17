@@ -10,7 +10,6 @@
     "beforeBuildCommand": "pnpm --filter @clearity/web build"
   },
   "app": {
-    "title": "Clearity",
     "windows": [
       {
         "title": "Clearity",
