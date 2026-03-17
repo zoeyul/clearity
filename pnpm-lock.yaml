@@ -46,6 +46,9 @@ importers:
       '@clearity/ui':
         specifier: workspace:*
         version: link:../../packages/ui
+      '@supabase/ssr':
+        specifier: ^0.5.0
+        version: 0.5.2(@supabase/supabase-js@2.99.1)
       '@vercel/analytics':
         specifier: 1.6.1
         version: 1.6.1(next@14.2.29(@opentelemetry/api@1.9.0)(react-dom@18.3.1(react@18.3.1))(react@18.3.1))(react@18.3.1)
@@ -114,6 +117,12 @@ importers:
       '@clearity/tsconfig':
         specifier: workspace:*
         version: link:../tsconfig
+      '@types/node':
+        specifier: ^22
+        version: 22.19.15
+      next:
+        specifier: 14.2.29
+        version: 14.2.29(@opentelemetry/api@1.9.0)(react-dom@18.3.1(react@19.2.4))(react@19.2.4)
       typescript:
         specifier: ^5.7.0
         version: 5.7.3
@@ -3839,6 +3848,32 @@ snapshots:
       - '@babel/core'
       - babel-plugin-macros
 
+  next@14.2.29(@opentelemetry/api@1.9.0)(react-dom@18.3.1(react@19.2.4))(react@19.2.4):
+    dependencies:
+      '@next/env': 14.2.29
+      '@swc/helpers': 0.5.5
+      busboy: 1.6.0
+      caniuse-lite: 1.0.30001779
+      graceful-fs: 4.2.11
+      postcss: 8.4.31
+      react: 19.2.4
+      react-dom: 18.3.1(react@19.2.4)
+      styled-jsx: 5.1.1(react@19.2.4)
+    optionalDependencies:
+      '@next/swc-darwin-arm64': 14.2.29
+      '@next/swc-darwin-x64': 14.2.29
+      '@next/swc-linux-arm64-gnu': 14.2.29
+      '@next/swc-linux-arm64-musl': 14.2.29
+      '@next/swc-linux-x64-gnu': 14.2.29
+      '@next/swc-linux-x64-musl': 14.2.29
+      '@next/swc-win32-arm64-msvc': 14.2.29
+      '@next/swc-win32-ia32-msvc': 14.2.29
+      '@next/swc-win32-x64-msvc': 14.2.29
+      '@opentelemetry/api': 1.9.0
+    transitivePeerDependencies:
+      - '@babel/core'
+      - babel-plugin-macros
+
   object-assign@4.1.1: {}
 
   open@8.4.2:
@@ -3898,6 +3933,12 @@ snapshots:
     dependencies:
       loose-envify: 1.4.0
       react: 18.3.1
+      scheduler: 0.23.2
+
+  react-dom@18.3.1(react@19.2.4):
+    dependencies:
+      loose-envify: 1.4.0
+      react: 19.2.4
       scheduler: 0.23.2
 
   react-hook-form@7.71.2(react@18.3.1):
@@ -4049,6 +4090,11 @@ snapshots:
     dependencies:
       client-only: 0.0.1
       react: 18.3.1
+
+  styled-jsx@5.1.1(react@19.2.4):
+    dependencies:
+      client-only: 0.0.1
+      react: 19.2.4
 
   swr@2.4.1(react@19.2.4):
     dependencies:

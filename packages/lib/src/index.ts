@@ -1,3 +1,2 @@
 export { createClient } from "./supabase/client";
-export { createServerSupabaseClient } from "./supabase/server";
-export type { Database } from "./supabase/types";
+export type { Database, ChatSession, Message, SessionKeyword, SessionEmotion, ActionItem } from "./supabase/types";
