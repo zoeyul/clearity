@@ -25,9 +25,12 @@ export function useChatHistory() {
   }, [fetchSessions])
 
   const createSession = useCallback(async () => {
+    const { data: { user } } = await supabase.auth.getUser()
+    if (!user) return null
+
     const { data } = await supabase
       .from("chat_sessions")
-      .insert({ title: "New Chat" })
+      .insert({ title: "New Chat", user_id: user.id })
       .select()
       .single()
 

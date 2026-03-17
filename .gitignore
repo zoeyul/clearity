@@ -29,6 +29,9 @@ apps/mobile/ios/Pods/
 # claude
 .claude/
 
+# include CLAUDE.md (overrides global gitignore)
+!CLAUDE.md
+
 # misc
 .DS_Store
 *.pem

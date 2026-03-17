@@ -3,11 +3,12 @@
 import { useEffect, useState } from "react"
 import { useRouter } from "next/navigation"
 import { Checkbox } from "@clearity/ui"
-import { Sparkles, ArrowRight, MessageSquare, Target, Calendar, LogOut } from "lucide-react"
+import { Sparkles, MessageSquare, Target, Calendar } from "lucide-react"
 import { cn } from "@clearity/ui/lib/utils"
 import { createClient } from "@clearity/lib"
 import { useDashboard } from "@/hooks/use-dashboard"
 import { useChatHistory } from "@/hooks/use-chat-history"
+import { LeftSidebar } from "@/components/dashboard/left-sidebar"
 
 export function ReflectionDashboard() {
   const router = useRouter()
@@ -22,20 +23,18 @@ export function ReflectionDashboard() {
   }, [])
 
   const handleNewSession = async () => {
+    const { data: { user } } = await supabase.auth.getUser()
+    if (!user) return
+
     const { data } = await supabase
       .from("chat_sessions")
-      .insert({ title: "New Chat" })
+      .insert({ title: "New Chat", user_id: user.id })
       .select()
       .single()
     if (data) router.push(`/chat/${data.id}`)
   }
 
   const handleSelectSession = (sessionId: string) => router.push(`/chat/${sessionId}`)
-
-  const handleSignOut = async () => {
-    await supabase.auth.signOut()
-    router.push("/login")
-  }
 
   const hour = new Date().getHours()
   const timeGreeting = hour < 12 ? "Good morning" : hour < 18 ? "Good afternoon" : "Good evening"
@@ -53,7 +52,7 @@ export function ReflectionDashboard() {
 
   if (dashboard.isLoading) {
     return (
-      <div className="flex h-screen w-full items-center justify-center bg-[#e8ecf0] dark:bg-[#1a1d1d]">
+      <div className="flex h-screen w-full items-center justify-center bg-[#f0f4f4] dark:bg-[#1a1d1d]">
         <div className="flex flex-col items-center gap-3">
           <div className="glass-solid flex h-12 w-12 items-center justify-center !rounded-2xl animate-pulse">
             <Sparkles className="h-6 w-6 text-white" />
@@ -66,51 +65,26 @@ export function ReflectionDashboard() {
 
   return (
     <div className="relative flex h-screen w-full overflow-hidden">
-      {/* Background — same as chat page */}
-      <div className="absolute inset-0 bg-[#e8ecf0] dark:bg-[#1a1d1d]" />
-      {/* Mesh gradient blobs — these show through the glass */}
-      <div className="absolute -top-[25%] -left-[10%] h-[70%] w-[55%] rounded-full bg-[#c2d8e8]/60 blur-[120px] dark:bg-[#1e3a4a]/25" />
-      <div className="absolute -bottom-[20%] -right-[5%] h-[60%] w-[50%] rounded-full bg-[#d5c8e0]/50 blur-[120px] dark:bg-[#2d2540]/20" />
-      <div className="absolute top-[15%] right-[25%] h-[45%] w-[35%] rounded-full bg-[#c8ddd8]/55 blur-[100px] dark:bg-[#253d35]/20" />
-      <div className="absolute bottom-[20%] left-[35%] h-[35%] w-[30%] rounded-full bg-[#d8d0c8]/40 blur-[100px] dark:bg-[#3a3428]/15" />
+      {/* Background — identical to chat page */}
+      <div className="absolute inset-0 bg-[#f0f4f4] dark:bg-[#1a1d1d]" />
+      <div className="absolute -top-[20%] left-[10%] h-[60%] w-[50%] rounded-full bg-[#d0e4e4]/50 blur-[120px] dark:bg-[#2a4040]/20" />
+      <div className="absolute -bottom-[15%] right-[5%] h-[50%] w-[40%] rounded-full bg-[#c8dede]/45 blur-[120px] dark:bg-[#253838]/15" />
+      <div className="absolute top-[30%] left-[40%] h-[40%] w-[35%] rounded-full bg-[#dceaea]/60 blur-[100px] dark:bg-[#2d4242]/15" />
       <div className="absolute inset-0 opacity-[0.02] dark:opacity-[0.03]" style={{ backgroundImage: `url("data:image/svg+xml,%3Csvg viewBox='0 0 256 256' xmlns='http://www.w3.org/2000/svg'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.9' numOctaves='4' stitchTiles='stitch'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23n)'/%3E%3C/svg%3E")` }} />
 
       {/* 2-column layout */}
-      <div className="relative z-10 flex h-full w-full gap-6 p-6">
+      <div className="relative z-10 flex h-full w-full gap-4 p-4 lg:gap-5 lg:p-5">
 
-        {/* LEFT SIDEBAR */}
-        <aside className="hidden lg:flex w-64 shrink-0 h-full">
-          <div className="glass flex flex-col w-full h-full !rounded-[32px]">
-            <div className="relative z-10 flex items-center gap-2 px-6 py-8">
-              <div className="glass-solid flex h-8 w-8 items-center justify-center !rounded-xl">
-                <Sparkles className="h-5 w-5 text-white" />
-              </div>
-              <h1 className="text-xl font-bold tracking-tight text-zinc-800 dark:text-zinc-100">Clearity</h1>
-            </div>
-            <nav className="relative z-10 flex-1 overflow-y-auto px-4">
-              <p className="text-[10px] font-bold text-zinc-400 tracking-widest uppercase mb-4 px-3">History</p>
-              <div className="flex flex-col gap-1">
-                {chatHistory.sessions.length === 0 ? (
-                  <p className="text-xs text-zinc-400 px-3">No conversations yet</p>
-                ) : (
-                  chatHistory.sessions.map((session) => (
-                    <button key={session.id} onClick={() => handleSelectSession(session.id)}
-                      className="glass-interactive w-full text-left px-4 py-3 !rounded-2xl !border-transparent !bg-transparent !shadow-none">
-                      <p className="text-sm text-zinc-600 dark:text-zinc-300 truncate">{session.title}</p>
-                    </button>
-                  ))
-                )}
-              </div>
-            </nav>
-            <div className="relative z-10 border-t border-white/15 px-4 py-4">
-              <button onClick={handleSignOut}
-                className="glass-interactive flex w-full items-center gap-3 !rounded-2xl !border-transparent !bg-transparent !shadow-none px-4 py-2.5 text-sm text-zinc-500 dark:text-zinc-400">
-                <LogOut className="h-4 w-4" />
-                <span>Sign Out</span>
-              </button>
-            </div>
-          </div>
-        </aside>
+        {/* LEFT SIDEBAR — same component as chat page */}
+        <div className="hidden w-[280px] shrink-0 lg:block h-full">
+          <LeftSidebar
+            sessions={chatHistory.sessions}
+            activeSessionId={null}
+            onSelectSession={handleSelectSession}
+            onNewChat={handleNewSession}
+            isLoading={chatHistory.isLoading}
+          />
+        </div>
 
         {/* CENTER MAIN */}
         <main className="flex-1 flex flex-col gap-6 overflow-y-auto min-w-0">

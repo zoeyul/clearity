@@ -19,9 +19,12 @@ export function ClearityDashboard({ sessionId }: ClearityDashboardProps) {
   const session = useSession(sessionId)
 
   const handleNewChat = async () => {
+    const { data: { user } } = await supabase.auth.getUser()
+    if (!user) return
+
     const { data } = await supabase
       .from("chat_sessions")
-      .insert({ title: "New Chat" })
+      .insert({ title: "New Chat", user_id: user.id })
       .select()
       .single()
     if (data) router.push(`/chat/${data.id}`)
