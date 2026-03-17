@@ -1,7 +1,7 @@
-import { ClearityDashboard } from "@/components/dashboard/clearity-dashboard"
+import { ReflectionDashboard } from "@/components/dashboard/reflection-dashboard"
 
 export const dynamic = "force-dynamic"
 
 export default function Page() {
-  return <ClearityDashboard />
+  return <ReflectionDashboard />
 }
