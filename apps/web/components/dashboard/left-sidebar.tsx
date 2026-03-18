@@ -88,7 +88,10 @@ export function LeftSidebar({
 
       {/* Settings & Sign Out */}
       <div className="relative z-10 border-t border-white/15 px-4 py-4 flex flex-col gap-2">
-        <button className="glass-subtle flex w-full items-center gap-3 !rounded-2xl px-3 py-2.5 text-sm text-zinc-700 dark:text-zinc-300">
+        <button
+          onClick={() => router.push("/settings")}
+          className="glass-subtle flex w-full items-center gap-3 !rounded-2xl px-3 py-2.5 text-sm text-zinc-700 dark:text-zinc-300"
+        >
           <Settings className="h-4 w-4 text-zinc-500 dark:text-zinc-400" />
           <span>Settings</span>
         </button>

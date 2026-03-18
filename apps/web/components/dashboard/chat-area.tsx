@@ -1,6 +1,8 @@
 "use client"
 
 import { useState, useRef, useEffect } from "react"
+import { useChat } from "@ai-sdk/react"
+import { TextStreamChatTransport } from "ai"
 import { Button } from "@clearity/ui"
 import { Input } from "@clearity/ui"
 import { Avatar, AvatarFallback } from "@clearity/ui"
@@ -18,52 +20,52 @@ import {
   BarChart3,
 } from "lucide-react"
 import { cn } from "@clearity/ui/lib/utils"
-import type { Message } from "@clearity/lib"
 
 interface ChatAreaProps {
-  messages: Message[]
+  sessionId: string
   sessionStatus: "active" | "completed"
-  onSendMessage: (content: string) => Promise<Message | null | undefined>
   onFinishSession: () => Promise<unknown>
   isLoading: boolean
 }
 
 export function ChatArea({
-  messages,
+  sessionId,
   sessionStatus,
-  onSendMessage,
   onFinishSession,
   isLoading,
 }: ChatAreaProps) {
   const [inputValue, setInputValue] = useState("")
-  const [isSending, setIsSending] = useState(false)
   const scrollRef = useRef<HTMLDivElement>(null)
 
-  // Auto-scroll to bottom on new messages
+  const apiKey = typeof window !== "undefined" ? localStorage.getItem("clearity-api-key") : null
+  const aboutMe = typeof window !== "undefined" ? localStorage.getItem("clearity-about-me") : null
+  const noApiKey = !apiKey
+
+  const { messages, sendMessage, status } = useChat({
+    id: sessionId,
+    transport: new TextStreamChatTransport({
+      api: "/api/chat",
+      body: { apiKey, aboutMe },
+    }),
+  })
+
+  const isStreaming = status === "streaming" || status === "submitted"
+
+  // Auto-scroll
   useEffect(() => {
     if (scrollRef.current) {
       scrollRef.current.scrollTop = scrollRef.current.scrollHeight
     }
-  }, [messages.length])
+  }, [messages.length, status])
 
-  const handleSend = async () => {
-    if (!inputValue.trim() || isSending || sessionStatus === "completed") return
-    setIsSending(true)
-    const content = inputValue
+  const handleSend = () => {
+    if (!inputValue.trim() || isStreaming || sessionStatus === "completed" || noApiKey) return
+    sendMessage({ text: inputValue })
     setInputValue("")
-    await onSendMessage(content)
-    setIsSending(false)
   }
 
   const handleFinish = async () => {
     await onFinishSession()
-  }
-
-  const formatTime = (dateStr: string) => {
-    return new Date(dateStr).toLocaleTimeString([], {
-      hour: "2-digit",
-      minute: "2-digit",
-    })
   }
 
   return (
@@ -78,9 +80,7 @@ export function ChatArea({
                 <span className="sr-only">Open navigation</span>
               </Button>
             </SheetTrigger>
-            <SheetContent side="left" className="w-[280px] p-5 bg-transparent border-none">
-              {/* Mobile sidebar handled by parent */}
-            </SheetContent>
+            <SheetContent side="left" className="w-[280px] p-5 bg-transparent border-none" />
           </Sheet>
 
           <div className="glass-solid flex h-10 w-10 items-center justify-center !rounded-2xl">
@@ -88,9 +88,7 @@ export function ChatArea({
           </div>
           <div>
             <h1 className="text-lg font-semibold text-zinc-800 dark:text-zinc-100">Clara</h1>
-            <p className="text-sm text-zinc-500 dark:text-zinc-400">
-              Analytical & Empathetic
-            </p>
+            <p className="text-sm text-zinc-500 dark:text-zinc-400">Analytical & Empathetic</p>
           </div>
         </div>
         <div className="flex items-center gap-2">
@@ -101,9 +99,7 @@ export function ChatArea({
                 <span className="sr-only">Open insights</span>
               </Button>
             </SheetTrigger>
-            <SheetContent side="right" className="w-[320px] p-5 bg-transparent border-none">
-              {/* Mobile analysis panel handled by parent */}
-            </SheetContent>
+            <SheetContent side="right" className="w-[320px] p-5 bg-transparent border-none" />
           </Sheet>
 
           <Button
@@ -123,6 +119,13 @@ export function ChatArea({
           <div className="flex items-center justify-center h-full">
             <p className="text-sm text-zinc-400">Loading messages...</p>
           </div>
+        ) : noApiKey ? (
+          <div className="flex items-center justify-center h-full">
+            <div className="text-center">
+              <p className="text-sm text-zinc-500 mb-2">No API key configured</p>
+              <p className="text-xs text-zinc-400">Go to Settings in the sidebar to add your Gemini API key</p>
+            </div>
+          </div>
         ) : messages.length === 0 ? (
           <div className="flex items-center justify-center h-full">
             <p className="text-sm text-zinc-400">Start a conversation...</p>
@@ -137,52 +140,45 @@ export function ChatArea({
                   message.role === "user" && "flex-row-reverse"
                 )}
               >
-                <Avatar
-                  className={cn(
-                    "h-9 w-9 shrink-0 rounded-2xl",
-                    message.role === "assistant" && "shadow-[0_4px_16px_rgba(31,38,135,0.1)]"
-                  )}
-                >
-                  <AvatarFallback
-                    className={cn(
-                      "rounded-2xl",
-                      message.role === "assistant"
-                        ? "glass-solid !rounded-2xl"
-                        : "glass-subtle !rounded-2xl text-zinc-700 dark:text-zinc-300"
-                    )}
-                  >
-                    {message.role === "assistant" ? (
-                      <Sparkles className="h-4 w-4" />
-                    ) : (
-                      <User className="h-4 w-4" />
-                    )}
+                <Avatar className={cn("h-9 w-9 shrink-0 rounded-2xl", message.role === "assistant" && "shadow-[0_4px_16px_rgba(31,38,135,0.1)]")}>
+                  <AvatarFallback className={cn("rounded-2xl", message.role === "assistant" ? "glass-solid !rounded-2xl" : "glass-subtle !rounded-2xl text-zinc-700 dark:text-zinc-300")}>
+                    {message.role === "assistant" ? <Sparkles className="h-4 w-4" /> : <User className="h-4 w-4" />}
                   </AvatarFallback>
                 </Avatar>
-                <div
-                  className={cn(
-                    "flex max-w-[70%] flex-col gap-1",
-                    message.role === "user" && "items-end"
-                  )}
-                >
-                  <div
-                    className={cn(
-                      "glass-subtle !rounded-3xl px-5 py-3.5 text-sm leading-relaxed text-zinc-800 dark:text-zinc-200",
-                      message.role === "user" && "!bg-white/20 dark:!bg-white/8"
-                    )}
-                  >
-                    {message.content}
+                <div className={cn("flex max-w-[70%] flex-col gap-1", message.role === "user" && "items-end")}>
+                  <div className={cn(
+                    "glass-subtle !rounded-3xl px-5 py-3.5 text-sm leading-relaxed text-zinc-800 dark:text-zinc-200",
+                    message.role === "user" && "!bg-white/20 dark:!bg-white/8"
+                  )}>
+                    {message.parts.map((part, i) => {
+                      if (part.type === "text") return <span key={i}>{part.text}</span>
+                      return null
+                    })}
                   </div>
-                  <span className="px-2 text-xs text-zinc-500 dark:text-zinc-400">
-                    {formatTime(message.created_at)}
-                  </span>
                 </div>
               </div>
             ))}
+            {isStreaming && messages[messages.length - 1]?.role !== "assistant" && (
+              <div className="flex gap-3">
+                <Avatar className="h-9 w-9 shrink-0 rounded-2xl">
+                  <AvatarFallback className="glass-solid !rounded-2xl">
+                    <Sparkles className="h-4 w-4 animate-pulse" />
+                  </AvatarFallback>
+                </Avatar>
+                <div className="glass-subtle !rounded-3xl px-5 py-3.5">
+                  <div className="flex gap-1">
+                    <span className="h-2 w-2 rounded-full bg-zinc-400 animate-bounce" style={{ animationDelay: "0ms" }} />
+                    <span className="h-2 w-2 rounded-full bg-zinc-400 animate-bounce" style={{ animationDelay: "150ms" }} />
+                    <span className="h-2 w-2 rounded-full bg-zinc-400 animate-bounce" style={{ animationDelay: "300ms" }} />
+                  </div>
+                </div>
+              </div>
+            )}
           </div>
         )}
       </div>
 
-      {/* Input Area */}
+      {/* Input */}
       <div className="relative z-10 border-t border-white/15 px-4 py-4 lg:px-6">
         <div className="flex flex-col gap-3">
           <div className="flex items-center gap-3">
@@ -191,14 +187,14 @@ export function ChatArea({
                 value={inputValue}
                 onChange={(e) => setInputValue(e.target.value)}
                 onKeyDown={(e) => e.key === "Enter" && !e.shiftKey && handleSend()}
-                placeholder={sessionStatus === "completed" ? "Session ended" : "Share what's on your mind..."}
-                disabled={sessionStatus === "completed"}
+                placeholder={sessionStatus === "completed" ? "Session ended" : noApiKey ? "Add API key in Settings first" : "Share what's on your mind..."}
+                disabled={sessionStatus === "completed" || noApiKey}
                 className="h-12 bg-transparent border-0 focus-visible:ring-0 focus-visible:ring-offset-0 text-zinc-800 dark:text-zinc-200 placeholder:text-zinc-400"
               />
             </div>
             <Button
               onClick={handleSend}
-              disabled={isSending || sessionStatus === "completed"}
+              disabled={isStreaming || sessionStatus === "completed" || noApiKey}
               size="lg"
               className="glass-subtle h-12 px-5 !rounded-2xl text-zinc-500 hover:text-zinc-700 dark:text-zinc-400 transition-all hover:-translate-y-0.5 hover:shadow-lg active:translate-y-0 active:scale-[0.98]"
             >

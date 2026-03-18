@@ -67,9 +67,8 @@ export function ClearityDashboard({ sessionId }: ClearityDashboardProps) {
 
         <main className="flex-1 min-h-0 h-full">
           <ChatArea
-            messages={session.messages}
+            sessionId={sessionId}
             sessionStatus={session.session?.status ?? "active"}
-            onSendMessage={session.sendMessage}
             onFinishSession={session.finishSession}
             isLoading={session.isLoading}
           />

@@ -1,5 +1,1 @@
-import { openai } from "@ai-sdk/openai";
-
-export { openai };
-
-export const defaultModel = openai("gpt-4o");
+// AI SDK exports — using Google Gemini
