@@ -2,28 +2,55 @@
 
 import { useEffect, useState } from "react"
 import { useRouter } from "next/navigation"
-import { Checkbox } from "@clearity/ui"
-import { Sparkles, MessageSquare, Target, Calendar } from "lucide-react"
+import { Input, Button, Checkbox } from "@clearity/ui"
+import {
+  Sparkles,
+  Brain,
+  Zap,
+  GitBranch,
+  MessageSquare,
+} from "lucide-react"
 import { cn } from "@clearity/ui/lib/utils"
 import { createClient } from "@clearity/lib"
 import { useDashboard } from "@/hooks/use-dashboard"
 import { useChatHistory } from "@/hooks/use-chat-history"
 import { LeftSidebar } from "@/components/dashboard/left-sidebar"
 
+// Floating Keywords for Thought Canvas
+const floatingKeywords: { text: string; size: string; x: number; y: number; opacity?: number }[] = [
+  { text: "career transition", size: "lg", x: 40, y: 25 },
+  { text: "independence", size: "md", x: 20, y: 40 },
+  { text: "fear", size: "sm", x: 60, y: 50 },
+  { text: "growth", size: "md", x: 30, y: 65 },
+  { text: "uncertainty", size: "sm", x: 50, y: 35 },
+  { text: "potential", size: "lg", x: 70, y: 60 },
+]
+
 export function ReflectionDashboard() {
   const router = useRouter()
   const supabase = createClient()
   const dashboard = useDashboard()
   const chatHistory = useChatHistory()
-  const [animated, setAnimated] = useState(false)
+  const [inputValue, setInputValue] = useState("")
+  const [keywords, setKeywords] = useState(floatingKeywords)
 
+  // Keyword opacity animation
   useEffect(() => {
-    const timer = setTimeout(() => setAnimated(true), 100)
-    return () => clearTimeout(timer)
+    const interval = setInterval(() => {
+      setKeywords((prev) =>
+        prev.map((kw) => ({
+          ...kw,
+          opacity: 0.5 + Math.random() * 0.5,
+        }))
+      )
+    }, 2500)
+    return () => clearInterval(interval)
   }, [])
 
   const handleNewSession = async () => {
-    const { data: { user } } = await supabase.auth.getUser()
+    const {
+      data: { user },
+    } = await supabase.auth.getUser()
     if (!user) return
 
     const { data } = await supabase
@@ -34,20 +61,37 @@ export function ReflectionDashboard() {
     if (data) router.push(`/chat/${data.id}`)
   }
 
-  const handleSelectSession = (sessionId: string) => router.push(`/chat/${sessionId}`)
+  const handleSelectSession = (sessionId: string) =>
+    router.push(`/chat/${sessionId}`)
 
-  const hour = new Date().getHours()
-  const timeGreeting = hour < 12 ? "Good morning" : hour < 18 ? "Good afternoon" : "Good evening"
+  // Build dynamic thought distribution from DB keywords
+  const thoughtDistribution =
+    dashboard.topKeywords.length > 0
+      ? dashboard.topKeywords.map((kw, i) => ({
+          domain: kw,
+          percentage: Math.max(10, 40 - i * 8),
+        }))
+      : [
+          { domain: "Career", percentage: 35 },
+          { domain: "Relationships", percentage: 25 },
+          { domain: "Self-Growth", percentage: 20 },
+          { domain: "Anxiety", percentage: 12 },
+          { domain: "Creativity", percentage: 8 },
+        ]
 
-  const insightSubtext = dashboard.topKeywords.length > 0
-    ? `You've been focusing on '${dashboard.topKeywords[0]}' recently. How are you feeling right now?`
-    : "Start a conversation to begin organizing your thoughts."
-
-  const formatRelativeDate = (dateStr: string) => {
-    const diff = Math.floor((Date.now() - new Date(dateStr).getTime()) / 86400000)
-    if (diff === 0) return "today"
-    if (diff === 1) return "yesterday"
-    return `${diff} days ago`
+  // Cognitive snapshot from DB
+  const cognitiveSnapshot = {
+    thoughtDensity:
+      dashboard.totalMessageCount > 50
+        ? "High"
+        : dashboard.totalMessageCount > 20
+        ? "Medium"
+        : "Low",
+    explorationDepth: Math.min(
+      5,
+      Math.max(1, Math.floor(dashboard.recentSessionCount / 2))
+    ),
+    primaryKeyword: dashboard.topKeywords[0] ?? "—",
   }
 
   if (dashboard.isLoading) {
@@ -57,7 +101,9 @@ export function ReflectionDashboard() {
           <div className="glass-solid flex h-12 w-12 items-center justify-center !rounded-2xl animate-pulse">
             <Sparkles className="h-6 w-6 text-white" />
           </div>
-          <p className="text-sm text-zinc-400">Loading your reflections...</p>
+          <p className="text-sm text-slate-400">
+            Loading your reflections...
+          </p>
         </div>
       </div>
     )
@@ -65,17 +111,14 @@ export function ReflectionDashboard() {
 
   return (
     <div className="relative flex h-screen w-full overflow-hidden">
-      {/* Background — identical to chat page */}
       <div className="absolute inset-0 bg-[#edf0f5] dark:bg-[#1a1d1d]" />
       <div className="absolute -top-[20%] left-[10%] h-[60%] w-[50%] rounded-full bg-[#d4dff0]/50 blur-[120px] dark:bg-[#2a3040]/20" />
       <div className="absolute -bottom-[15%] right-[5%] h-[50%] w-[40%] rounded-full bg-[#dde3ed]/45 blur-[120px] dark:bg-[#252d38]/15" />
       <div className="absolute top-[30%] left-[40%] h-[40%] w-[35%] rounded-full bg-[#e5eaf2]/60 blur-[100px] dark:bg-[#2d3342]/15" />
       <div className="absolute inset-0 opacity-[0.02] dark:opacity-[0.03]" style={{ backgroundImage: `url("data:image/svg+xml,%3Csvg viewBox='0 0 256 256' xmlns='http://www.w3.org/2000/svg'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.9' numOctaves='4' stitchTiles='stitch'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23n)'/%3E%3C/svg%3E")` }} />
 
-      {/* 2-column layout */}
       <div className="relative z-10 flex h-full w-full gap-4 p-4 lg:gap-5 lg:p-5">
-
-        {/* LEFT SIDEBAR — same component as chat page */}
+        {/* ========== LEFT: Sidebar — same as chat page ========== */}
         <div className="hidden w-[280px] shrink-0 lg:block h-full">
           <LeftSidebar
             sessions={chatHistory.sessions}
@@ -86,125 +129,203 @@ export function ReflectionDashboard() {
           />
         </div>
 
-        {/* CENTER MAIN */}
-        <main className="flex-1 flex flex-col gap-6 overflow-y-auto min-w-0">
-
-          {/* Welcome Hero */}
-          <section className={cn(
-            "glass !rounded-[32px] p-10 transition-all duration-500",
-            animated ? "opacity-100 translate-y-0" : "opacity-0 translate-y-4"
-          )}>
-            <div className="relative z-10">
-              <h2 className="text-3xl font-bold text-zinc-800 dark:text-zinc-100 mb-3">
-                {timeGreeting}{dashboard.userName ? `, ${dashboard.userName}` : ""}.
-              </h2>
-              <p className="text-zinc-500 dark:text-zinc-400 mb-2 max-w-md leading-relaxed text-sm">{insightSubtext}</p>
-              {dashboard.keywordTrendMessage && (
-                <p className="text-zinc-400 text-xs mb-6">{dashboard.keywordTrendMessage}</p>
-              )}
-              {!dashboard.keywordTrendMessage && <div className="mb-6" />}
-              <button onClick={handleNewSession}
-                className="glass-solid px-8 py-4 !rounded-2xl font-bold text-sm hover:scale-[1.02] transition-all">
-                <span className="flex items-center gap-2">
-                  <MessageSquare className="w-4 h-4" />
-                  Start a New Conversation
-                </span>
-              </button>
-            </div>
-          </section>
-
-          {/* Bento Grid */}
-          <div className="grid grid-cols-1 md:grid-cols-3 gap-6 flex-1 min-h-0">
-
-            {/* Mood Trend (2 cols) */}
-            <div className={cn(
-              "md:col-span-2 glass !rounded-[32px] p-8 transition-all duration-500 delay-100",
-              animated ? "opacity-100 translate-y-0" : "opacity-0 translate-y-4"
-            )}>
-              <div className="relative z-10 flex justify-between items-center mb-6">
-                <h3 className="font-bold text-zinc-700 dark:text-zinc-200">Emotional Drift</h3>
-                <Calendar className="w-4 h-4 text-zinc-400" />
+        {/* ========== CENTER: Thought Canvas ========== */}
+        <main className="flex-1 flex flex-col gap-4">
+          {/* Cognitive Snapshot */}
+          <div className="glass !rounded-3xl px-6 py-4">
+            <div className="flex items-center justify-between">
+              <div className="flex items-center gap-3">
+                <Brain className="h-5 w-5 text-indigo-500" />
+                <h1 className="text-lg font-semibold text-slate-800 dark:text-white">
+                  Cognitive Snapshot
+                </h1>
               </div>
-              <div className="relative z-10 h-48 flex items-end gap-3">
-                {dashboard.weeklyMoods.map((mood, i) => (
-                  <div key={i} className="flex-1 flex flex-col items-center gap-2">
-                    <div className="w-full bg-zinc-200/40 dark:bg-zinc-700/20 rounded-2xl relative overflow-hidden h-40">
-                      <div
-                        className={cn(
-                          "absolute bottom-0 w-full rounded-2xl transition-all duration-700 ease-out",
-                          mood.value > 60 ? "bg-zinc-500/80 dark:bg-zinc-400/60"
-                            : mood.value > 30 ? "bg-zinc-400/60 dark:bg-zinc-500/40"
-                            : "bg-zinc-300/50 dark:bg-zinc-600/30"
-                        )}
-                        style={{ height: animated ? `${mood.value}%` : "0%" }}
-                      />
-                    </div>
-                    <span className="text-[10px] text-zinc-400">{mood.day}</span>
-                  </div>
-                ))}
-              </div>
-              {dashboard.bestDay && (
-                <p className="relative z-10 text-xs text-zinc-400 mt-4">
-                  Most at ease on <span className="text-zinc-600 dark:text-zinc-300 font-medium">{dashboard.bestDay}</span>
-                </p>
-              )}
-            </div>
-
-            {/* Keywords (1 col) */}
-            <div className={cn(
-              "glass !rounded-[32px] p-8 transition-all duration-500 delay-150",
-              animated ? "opacity-100 translate-y-0" : "opacity-0 translate-y-4"
-            )}>
-              <div className="relative z-10">
-                <h3 className="font-bold text-zinc-700 dark:text-zinc-200 mb-6">Keywords</h3>
-                {dashboard.topKeywords.length === 0 ? (
-                  <p className="text-sm text-zinc-400">Themes will appear as you chat</p>
-                ) : (
-                  <div className="flex flex-wrap gap-2">
-                    {dashboard.topKeywords.map((keyword) => (
-                      <span key={keyword} className="glass-subtle px-4 py-2 !rounded-full text-xs font-bold text-zinc-600 dark:text-zinc-300">
-                        #{keyword}
-                      </span>
-                    ))}
-                  </div>
-                )}
-              </div>
-            </div>
-
-            {/* Action Items (full width) */}
-            <div className={cn(
-              "md:col-span-3 glass !rounded-[32px] p-8 transition-all duration-500 delay-200",
-              animated ? "opacity-100 translate-y-0" : "opacity-0 translate-y-4"
-            )}>
-              <div className="relative z-10">
-                <div className="flex items-center gap-2 mb-5">
-                  <Target className="w-5 h-5 text-zinc-600 dark:text-zinc-400" />
-                  <h3 className="font-bold text-zinc-700 dark:text-zinc-200">Pending Action Items</h3>
+              <div className="flex items-center gap-8">
+                <div className="text-center">
+                  <p className="text-[10px] text-slate-500 uppercase tracking-wide">
+                    Density
+                  </p>
+                  <p className="text-sm font-semibold text-slate-800 dark:text-white">
+                    {cognitiveSnapshot.thoughtDensity}
+                  </p>
                 </div>
-                {dashboard.pendingActions.length === 0 ? (
-                  <p className="text-sm text-zinc-400">All caught up! Start a session to get new action items.</p>
-                ) : (
-                  <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
-                    {dashboard.pendingActions.map((item) => (
-                      <label key={item.id}
-                        className="flex items-center gap-4 p-4 glass-subtle !rounded-2xl cursor-pointer transition-all">
-                        <Checkbox
-                          checked={item.is_completed}
-                          onCheckedChange={(checked) => dashboard.toggleActionItem(item.id, checked as boolean)}
-                          className="rounded-full border-zinc-300 dark:border-zinc-600"
-                        />
-                        <div className="flex-1 min-w-0">
-                          <p className="text-sm text-zinc-600 dark:text-zinc-300">{item.text}</p>
-                          <p className="text-[10px] text-zinc-400 mt-0.5">from &ldquo;{item.session_title}&rdquo; · {formatRelativeDate(item.created_at)}</p>
-                        </div>
-                      </label>
-                    ))}
+                <div className="text-center">
+                  <p className="text-[10px] text-slate-500 uppercase tracking-wide">
+                    Depth
+                  </p>
+                  <p className="text-sm font-semibold text-slate-800 dark:text-white">
+                    Level {cognitiveSnapshot.explorationDepth}
+                  </p>
+                </div>
+                <div className="text-center">
+                  <p className="text-[10px] text-slate-500 uppercase tracking-wide">
+                    Focus
+                  </p>
+                  <p className="text-sm font-semibold text-indigo-600 dark:text-indigo-400">
+                    {cognitiveSnapshot.primaryKeyword}
+                  </p>
+                </div>
+              </div>
+            </div>
+          </div>
+
+          {/* Thought Canvas */}
+          <div className="flex-1 glass !rounded-3xl p-6 relative overflow-hidden">
+            {/* Floating Keywords */}
+            <div className="absolute inset-0">
+              {(dashboard.topKeywords.length > 0
+                ? dashboard.topKeywords.map((kw, i) => ({
+                    text: kw,
+                    size: i === 0 ? "lg" : i < 3 ? "md" : "sm",
+                    x: 20 + ((i * 17) % 60),
+                    y: 25 + ((i * 13) % 50),
+                    opacity: keywords[i]?.opacity ?? 0.8,
+                  }))
+                : keywords
+              ).map((kw, i) => (
+                <div
+                  key={i}
+                  className="absolute transition-all duration-1000 cursor-pointer hover:scale-110"
+                  style={{
+                    left: `${kw.x}%`,
+                    top: `${kw.y}%`,
+                    opacity: kw.opacity ?? 0.8,
+                  }}
+                >
+                  <div className={cn(
+                    "px-4 py-2 rounded-full shadow-sm",
+                    kw.size === "lg" && "bg-indigo-100 dark:bg-indigo-900/40 text-base font-medium text-indigo-700 dark:text-indigo-300",
+                    kw.size === "md" && "bg-slate-100 dark:bg-slate-700/60 text-sm text-slate-600 dark:text-slate-300",
+                    kw.size === "sm" && "bg-slate-50 dark:bg-slate-800/60 text-xs text-slate-500 dark:text-slate-400",
+                  )}>
+                    {kw.text}
                   </div>
-                )}
+                </div>
+              ))}
+
+              {/* Connection Lines */}
+              <svg className="absolute inset-0 w-full h-full pointer-events-none">
+                <line x1="42%" y1="27%" x2="22%" y2="42%" stroke="#6366f1" strokeWidth="1" strokeDasharray="4 4" opacity="0.3" />
+                <line x1="42%" y1="27%" x2="62%" y2="52%" stroke="#6366f1" strokeWidth="1" strokeDasharray="4 4" opacity="0.3" />
+                <line x1="72%" y1="62%" x2="52%" y2="37%" stroke="#8b5cf6" strokeWidth="1" strokeDasharray="4 4" opacity="0.25" />
+              </svg>
+            </div>
+
+            {/* Input */}
+            <div className="absolute inset-x-0 bottom-6 flex justify-center px-6">
+              <div className="w-full max-w-xl">
+                <div className="relative rounded-2xl bg-slate-100/90 dark:bg-slate-700/60 overflow-hidden">
+                  <Input
+                    value={inputValue}
+                    onChange={(e) => setInputValue(e.target.value)}
+                    onKeyDown={(e) => {
+                      if (e.key === "Enter" && inputValue.trim()) {
+                        handleNewSession()
+                      }
+                    }}
+                    placeholder="What's on your mind?"
+                    className="h-12 px-5 pr-12 bg-transparent border-0 text-slate-800 dark:text-white placeholder:text-slate-400 focus-visible:ring-0"
+                  />
+                  <Button
+                    size="icon"
+                    variant="ghost"
+                    onClick={handleNewSession}
+                    className="absolute right-2 top-1/2 -translate-y-1/2 h-8 w-8 rounded-xl text-slate-500 hover:text-indigo-600 hover:bg-indigo-50"
+                  >
+                    <Zap className="h-4 w-4" />
+                  </Button>
+                </div>
+                <p className="text-center text-[11px] text-slate-400 mt-2">
+                  Your thoughts become interconnected patterns
+                </p>
               </div>
             </div>
           </div>
         </main>
+
+        {/* ========== RIGHT: Analysis ========== */}
+        <aside className="hidden w-[280px] shrink-0 xl:flex flex-col gap-4">
+          {/* Thought Distribution */}
+          <div className="glass !rounded-3xl p-5">
+            <div className="flex items-center gap-2 mb-4">
+              <div className="h-4 w-4 rounded-full border-2 border-indigo-400" />
+              <h3 className="text-sm font-semibold text-slate-800 dark:text-white">
+                Thought Distribution
+              </h3>
+            </div>
+
+            <p className="text-xs text-slate-500 mb-4">
+              Where your mind has been this week
+            </p>
+
+            <div className="space-y-3">
+              {thoughtDistribution.map((item) => (
+                <div key={item.domain}>
+                  <div className="flex items-center justify-between mb-1">
+                    <span className="text-xs text-slate-600 dark:text-slate-300">
+                      {item.domain}
+                    </span>
+                    <span className="text-xs font-medium text-slate-800 dark:text-white">
+                      {item.percentage}%
+                    </span>
+                  </div>
+                  <div className="h-1.5 w-full rounded-full bg-slate-100 dark:bg-slate-700 overflow-hidden">
+                    <div
+                      className="h-full rounded-full bg-gradient-to-r from-indigo-500 to-purple-500 transition-all duration-500"
+                      style={{ width: `${item.percentage}%` }}
+                    />
+                  </div>
+                </div>
+              ))}
+            </div>
+          </div>
+
+          {/* Pending Action Items */}
+          <div className="flex-1 glass !rounded-3xl p-5 overflow-hidden flex flex-col">
+            <div className="flex items-center gap-2 mb-4">
+              <GitBranch className="h-4 w-4 text-purple-500" />
+              <h3 className="text-sm font-semibold text-slate-800 dark:text-white">
+                Pending Actions
+              </h3>
+            </div>
+
+            <div className="flex-1 overflow-y-auto space-y-3">
+              {(dashboard.pendingActions.length > 0
+                ? dashboard.pendingActions
+                : [
+                    { id: "fake-1", text: "Schedule 1:1 with manager about workload", is_completed: false, session_title: "Work Stress" },
+                    { id: "fake-2", text: "Try 10-min wind-down routine before bed", is_completed: false, session_title: "Sleep & Anxiety" },
+                    { id: "fake-3", text: "Write down 3 priorities for this week", is_completed: true, session_title: "Career Goals" },
+                    { id: "fake-4", text: "Practice saying no to new requests", is_completed: false, session_title: "Boundaries" },
+                  ]
+              ).map((item) => (
+                  <label
+                    key={item.id}
+                    className="flex items-start gap-3 p-3 rounded-2xl bg-slate-50/80 dark:bg-slate-700/30 hover:bg-slate-100 dark:hover:bg-slate-700/50 transition-colors cursor-pointer"
+                  >
+                    <Checkbox
+                      checked={item.is_completed}
+                      onCheckedChange={(checked) =>
+                        dashboard.toggleActionItem(
+                          item.id,
+                          checked as boolean
+                        )
+                      }
+                      className="mt-0.5 rounded-md border-slate-300 dark:border-slate-600"
+                    />
+                    <div className="flex-1 min-w-0">
+                      <p className="text-xs text-slate-700 dark:text-slate-200">
+                        {item.text}
+                      </p>
+                      <p className="text-[10px] text-slate-400 mt-0.5">
+                        from &ldquo;{item.session_title}&rdquo;
+                      </p>
+                    </div>
+                  </label>
+                ))}
+            </div>
+          </div>
+        </aside>
       </div>
     </div>
   )

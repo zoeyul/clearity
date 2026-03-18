@@ -14,8 +14,6 @@ import {
   Sparkles,
   CheckCircle2,
   User,
-  Mic,
-  Paperclip,
   Menu,
   BarChart3,
 } from "lucide-react"
@@ -108,13 +106,14 @@ export function ChatArea({
             </SheetContent>
           </Sheet>
 
-          <span className="glass-subtle hidden sm:flex items-center gap-1.5 !rounded-full px-3 py-1.5 text-xs font-medium text-zinc-600 dark:text-zinc-300">
-            <span className={cn(
-              "h-2 w-2 rounded-full",
-              sessionStatus === "active" ? "bg-emerald-500 animate-pulse" : "bg-zinc-400"
-            )} />
-            {sessionStatus === "active" ? "Session Active" : "Session Ended"}
-          </span>
+          <Button
+            onClick={handleFinish}
+            disabled={sessionStatus === "completed"}
+            className="glass-solid gap-2 !rounded-2xl px-5 py-2"
+          >
+            <CheckCircle2 className="h-4 w-4" />
+            Clarify
+          </Button>
         </div>
       </header>
 
@@ -194,41 +193,21 @@ export function ChatArea({
                 onKeyDown={(e) => e.key === "Enter" && !e.shiftKey && handleSend()}
                 placeholder={sessionStatus === "completed" ? "Session ended" : "Share what's on your mind..."}
                 disabled={sessionStatus === "completed"}
-                className="pr-20 h-12 bg-transparent border-0 focus-visible:ring-0 focus-visible:ring-offset-0 text-zinc-800 dark:text-zinc-200 placeholder:text-zinc-400"
+                className="h-12 bg-transparent border-0 focus-visible:ring-0 focus-visible:ring-offset-0 text-zinc-800 dark:text-zinc-200 placeholder:text-zinc-400"
               />
-              <div className="absolute right-2 top-1/2 flex -translate-y-1/2 items-center gap-1">
-                <Button variant="ghost" size="icon" className="glass-interactive h-8 w-8 !rounded-xl !border-transparent !bg-transparent text-zinc-500 hover:text-zinc-700 dark:text-zinc-400 dark:hover:text-zinc-200">
-                  <Paperclip className="h-4 w-4" />
-                </Button>
-                <Button variant="ghost" size="icon" className="glass-interactive h-8 w-8 !rounded-xl !border-transparent !bg-transparent text-zinc-500 hover:text-zinc-700 dark:text-zinc-400 dark:hover:text-zinc-200">
-                  <Mic className="h-4 w-4" />
-                </Button>
-              </div>
             </div>
             <Button
               onClick={handleSend}
               disabled={isSending || sessionStatus === "completed"}
               size="lg"
-              className="glass-solid h-12 px-5 !rounded-2xl border-0"
+              className="glass-subtle h-12 px-5 !rounded-2xl text-zinc-500 hover:text-zinc-700 dark:text-zinc-400 transition-all hover:-translate-y-0.5 hover:shadow-lg active:translate-y-0 active:scale-[0.98]"
             >
               <Send className="h-4 w-4" />
             </Button>
           </div>
-          <div className="flex items-center justify-between">
-            <p className="text-xs text-zinc-500 dark:text-zinc-400">
-              Your conversations are private and secure
-            </p>
-            <Button
-              variant="outline"
-              size="sm"
-              onClick={handleFinish}
-              disabled={sessionStatus === "completed"}
-              className="glass-interactive gap-2 !rounded-xl text-zinc-700 hover:text-zinc-800 dark:text-zinc-300"
-            >
-              <CheckCircle2 className="h-4 w-4" />
-              Finish & Summarize
-            </Button>
-          </div>
+          <p className="text-xs text-zinc-500 dark:text-zinc-400">
+            Your conversations are private and secure
+          </p>
         </div>
       </div>
     </div>

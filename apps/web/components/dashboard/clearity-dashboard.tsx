@@ -1,9 +1,9 @@
 "use client"
 
+import { useEffect } from "react"
 import { useRouter } from "next/navigation"
 import { LeftSidebar } from "@/components/dashboard/left-sidebar"
 import { ChatArea } from "@/components/dashboard/chat-area"
-import { AnalysisPanel } from "@/components/dashboard/analysis-panel"
 import { useSession } from "@/hooks/use-session"
 import { useChatHistory } from "@/hooks/use-chat-history"
 import { createClient } from "@clearity/lib"
@@ -31,6 +31,20 @@ export function ClearityDashboard({ sessionId }: ClearityDashboardProps) {
   }
 
   const handleSelectSession = (id: string) => router.push(`/chat/${id}`)
+
+  // Delete empty session on leave — server checks message count
+  useEffect(() => {
+    const cleanup = () => {
+      fetch(`/api/sessions/${sessionId}/cleanup`, { method: "POST", keepalive: true })
+    }
+
+    window.addEventListener("beforeunload", cleanup)
+
+    return () => {
+      window.removeEventListener("beforeunload", cleanup)
+      cleanup()
+    }
+  }, [sessionId])
 
   return (
     <div className="relative flex h-screen w-full overflow-hidden">
@@ -60,19 +74,6 @@ export function ClearityDashboard({ sessionId }: ClearityDashboardProps) {
             isLoading={session.isLoading}
           />
         </main>
-
-        <div className="hidden w-[320px] shrink-0 xl:block h-full">
-          <AnalysisPanel
-            keywords={session.keywords}
-            emotions={session.emotions}
-            actionItems={session.actionItems}
-            messageCount={session.messageCount}
-            sessionDuration={session.session?.duration_minutes}
-            sessionStartedAt={session.session?.started_at}
-            onToggleActionItem={session.toggleActionItem}
-            isLoading={session.isLoading}
-          />
-        </div>
       </div>
     </div>
   )
