@@ -61,6 +61,20 @@ export function ReflectionDashboard() {
     if (data) router.push(`/chat/${data.id}`)
   }
 
+  const handleKeywordClick = async (keywordText: string) => {
+    const {
+      data: { user },
+    } = await supabase.auth.getUser()
+    if (!user) return
+
+    const { data } = await supabase
+      .from("chat_sessions")
+      .insert({ title: keywordText, user_id: user.id })
+      .select()
+      .single()
+    if (data) router.push(`/chat/${data.id}?keyword=${encodeURIComponent(keywordText)}`)
+  }
+
   const handleSelectSession = (sessionId: string) =>
     router.push(`/chat/${sessionId}`)
 
@@ -185,6 +199,7 @@ export function ReflectionDashboard() {
               ).map((kw, i) => (
                 <div
                   key={i}
+                  onClick={() => handleKeywordClick(kw.text)}
                   className="absolute transition-all duration-1000 cursor-pointer hover:scale-110"
                   style={{
                     left: `${kw.x}%`,

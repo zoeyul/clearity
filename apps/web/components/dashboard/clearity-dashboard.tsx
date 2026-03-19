@@ -10,9 +10,10 @@ import { createClient } from "@clearity/lib"
 
 interface ClearityDashboardProps {
   sessionId: string
+  keyword?: string
 }
 
-export function ClearityDashboard({ sessionId }: ClearityDashboardProps) {
+export function ClearityDashboard({ sessionId, keyword }: ClearityDashboardProps) {
   const router = useRouter()
   const supabase = createClient()
   const chatHistory = useChatHistory()
@@ -71,6 +72,7 @@ export function ClearityDashboard({ sessionId }: ClearityDashboardProps) {
             sessionStatus={session.session?.status ?? "active"}
             onFinishSession={session.finishSession}
             isLoading={session.isLoading}
+            keyword={keyword}
           />
         </main>
       </div>

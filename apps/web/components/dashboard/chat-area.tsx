@@ -3,6 +3,7 @@
 import { useState, useRef, useEffect } from "react"
 import { useChat } from "@ai-sdk/react"
 import { TextStreamChatTransport } from "ai"
+import { motion } from "framer-motion"
 import { Button } from "@clearity/ui"
 import { Input } from "@clearity/ui"
 import { Avatar, AvatarFallback } from "@clearity/ui"
@@ -26,6 +27,7 @@ interface ChatAreaProps {
   sessionStatus: "active" | "completed"
   onFinishSession: () => Promise<unknown>
   isLoading: boolean
+  keyword?: string
 }
 
 export function ChatArea({
@@ -33,6 +35,7 @@ export function ChatArea({
   sessionStatus,
   onFinishSession,
   isLoading,
+  keyword,
 }: ChatAreaProps) {
   const [inputValue, setInputValue] = useState("")
   const scrollRef = useRef<HTMLDivElement>(null)
@@ -127,8 +130,39 @@ export function ChatArea({
             </div>
           </div>
         ) : messages.length === 0 ? (
-          <div className="flex items-center justify-center h-full">
-            <p className="text-sm text-zinc-400">Start a conversation...</p>
+          <div className="flex flex-col py-6 px-2">
+            <motion.div
+              initial={{ opacity: 0, y: 10 }}
+              animate={{ opacity: 1, y: 0 }}
+              transition={{ duration: 0.6, ease: "easeOut" }}
+              className="flex gap-3"
+            >
+              <Avatar className="h-9 w-9 shrink-0 rounded-2xl shadow-[0_4px_16px_rgba(31,38,135,0.1)]">
+                <AvatarFallback className="glass-solid !rounded-2xl">
+                  <Sparkles className="h-4 w-4" />
+                </AvatarFallback>
+              </Avatar>
+              <div className="flex max-w-[70%] flex-col gap-1">
+                <motion.div
+                  initial={{ opacity: 0 }}
+                  animate={{ opacity: 1 }}
+                  transition={{ duration: 0.8, delay: 0.3 }}
+                  className="glass-subtle !rounded-3xl px-5 py-3.5 text-sm leading-relaxed text-zinc-800 dark:text-zinc-200"
+                >
+                  {keyword ? (
+                    <>
+                      I see you&apos;re focusing on &apos;
+                      <span className="font-semibold text-sky-600 dark:text-sky-400 drop-shadow-[0_0_6px_rgba(56,189,248,0.4)]">
+                        {keyword}
+                      </span>
+                      &apos;. Want to dig deeper, or is there something specific about it that&apos;s been stuck?
+                    </>
+                  ) : (
+                    "What's been on your mind lately? No need to organize it — just start wherever feels right."
+                  )}
+                </motion.div>
+              </div>
+            </motion.div>
           </div>
         ) : (
           <div className="flex flex-col gap-6 py-6">
