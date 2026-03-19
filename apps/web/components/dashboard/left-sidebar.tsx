@@ -1,6 +1,8 @@
 "use client"
 
+import { Button } from "@clearity/ui"
 import {
+  Plus,
   Sparkles,
   Clock,
   Settings,
@@ -49,6 +51,18 @@ export function LeftSidebar({
             Clearity
           </span>
         </button>
+      </div>
+
+      {/* New Chat Button */}
+      <div className="relative z-10 px-4 py-4">
+        <Button
+          onClick={onNewChat}
+          className="glass-solid w-full justify-start gap-2 !rounded-2xl border-0"
+          size="lg"
+        >
+          <Plus className="h-4 w-4" />
+          New Chat
+        </Button>
       </div>
 
       {/* Navigation */}
