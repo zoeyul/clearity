@@ -18,15 +18,17 @@ export function ReflectionDashboard() {
   const [inputValue, setInputValue] = useState("");
 
   // Fixed particle positions — won't change on re-render
-  const particles = useMemo(() =>
-    Array.from({ length: 15 }).map(() => ({
-      size: 8 + Math.random() * 10,
-      x: 20 + Math.random() * 55,
-      y: 15 + Math.random() * 60,
-      duration: 7 + Math.random() * 10,
-      delay: Math.random() * -15,
-    })),
-  []);
+  const particles = useMemo(
+    () =>
+      Array.from({ length: 15 }).map(() => ({
+        size: 8 + Math.random() * 10,
+        x: 20 + Math.random() * 55,
+        y: 15 + Math.random() * 60,
+        duration: 7 + Math.random() * 10,
+        delay: Math.random() * -15,
+      })),
+    [],
+  );
   const [keywords, setKeywords] = useState<
     { text: string; size: string; x: number; y: number; opacity?: number }[]
   >([]);

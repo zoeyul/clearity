@@ -195,7 +195,6 @@ export function ChatArea({
           </div>
         ) : messages.length === 0 ? (
           <div className="flex flex-col pt-12 pb-6 px-2">
-            {/* Greeting message */}
             <motion.div
               initial={{ opacity: 0, y: 10 }}
               animate={{ opacity: 1, y: 0 }}
@@ -215,7 +214,6 @@ export function ChatArea({
                 "What's been on your mind lately? No need to organize it — just start wherever feels right."
               )}
             </motion.div>
-
           </div>
         ) : (
           <div className="flex flex-col gap-6 py-6">
