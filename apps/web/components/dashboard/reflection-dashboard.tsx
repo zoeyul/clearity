@@ -2,7 +2,7 @@
 
 import { useEffect, useState, useMemo } from "react";
 import { useRouter } from "next/navigation";
-import { Input, Button, Checkbox } from "@clearity/ui";
+import { Button, Checkbox } from "@clearity/ui";
 import { Sparkles, Brain, Zap, GitBranch } from "lucide-react";
 import { cn } from "@clearity/ui/lib/utils";
 import { createClient } from "@clearity/lib";
@@ -16,8 +16,13 @@ export function ReflectionDashboard() {
   const dashboard = useDashboard();
   const chatHistory = useChatHistory();
   const [inputValue, setInputValue] = useState("");
+  const [isExtracting, setIsExtracting] = useState(false);
+  const [expandedMain, setExpandedMain] = useState<string | null>(null);
+  const [canvasKeywords, setCanvasKeywords] = useState<
+    { id: string; text: string; hierarchy: "main" | "sub"; x: number; y: number; opacity: number }[]
+  >([]);
 
-  // Fixed particle positions — won't change on re-render
+  // Fixed particle positions
   const particles = useMemo(
     () =>
       Array.from({ length: 15 }).map(() => ({
@@ -29,35 +34,114 @@ export function ReflectionDashboard() {
       })),
     [],
   );
-  const [keywords, setKeywords] = useState<
-    { text: string; size: string; x: number; y: number; opacity?: number }[]
-  >([]);
+
+  // Load existing fragment keywords from DB
+  useEffect(() => {
+    const loadKeywords = async () => {
+      const { data: { user } } = await supabase.auth.getUser();
+      if (!user) return;
+
+      const { data } = await supabase
+        .from("session_keywords")
+        .select("id, label, hierarchy, status")
+        .eq("user_id", user.id)
+        .in("status", ["fragment", "clustered", "core"]);
+
+      if (data && data.length > 0) {
+        setCanvasKeywords(data.map((kw, i) => ({
+          id: kw.id,
+          text: kw.label,
+          hierarchy: (kw.hierarchy ?? "sub") as "main" | "sub",
+          x: 15 + ((i * 19) % 65),
+          y: 15 + ((i * 23) % 55),
+          opacity: kw.status === "core" ? 1 : kw.status === "clustered" ? 0.8 : 0.6,
+        })));
+      }
+    };
+    loadKeywords();
+  }, [supabase]);
 
   // Keyword opacity animation
   useEffect(() => {
+    if (canvasKeywords.length === 0) return;
     const interval = setInterval(() => {
-      setKeywords((prev) =>
+      setCanvasKeywords((prev) =>
         prev.map((kw) => ({
           ...kw,
-          opacity: 0.5 + Math.random() * 0.5,
+          opacity: Math.max(0.4, Math.min(1, kw.opacity + (Math.random() - 0.5) * 0.2)),
         })),
       );
     }, 2500);
     return () => clearInterval(interval);
-  }, []);
+  }, [canvasKeywords.length]);
 
-  const handleNewSession = async () => {
-    const {
-      data: { user },
-    } = await supabase.auth.getUser();
-    if (!user) return;
+  // Extract keywords from input via Gemini
+  const handleExtract = async () => {
+    if (!inputValue.trim() || isExtracting) return;
 
-    const { data } = await supabase
-      .from("chat_sessions")
-      .insert({ title: "New Chat", user_id: user.id })
-      .select()
-      .single();
-    if (data) router.push(`/chat/${data.id}`);
+    const apiKey = typeof window !== "undefined" ? localStorage.getItem("clearity-api-key") : null;
+    if (!apiKey) return;
+
+    setIsExtracting(true);
+    const text = inputValue;
+    setInputValue("");
+
+    // Reset textarea height
+    const textarea = document.querySelector("textarea");
+    if (textarea) textarea.style.height = "auto";
+
+    try {
+      const res = await fetch("/api/extract-keywords", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ message: text, apiKey }),
+      });
+
+      if (res.ok) {
+        const data = await res.json();
+        const { data: { user } } = await supabase.auth.getUser();
+        if (!user) return;
+
+        // Save to DB as fragments
+        const toInsert = [
+          { label: data.main, intensity: "high", hierarchy: "main", status: "fragment", user_id: user.id },
+          ...(data.subs ?? []).map((sub: string) => ({
+            label: sub, intensity: "medium", hierarchy: "sub", status: "fragment", user_id: user.id,
+          })),
+        ];
+
+        const { data: inserted } = await supabase
+          .from("session_keywords")
+          .insert(toInsert)
+          .select("id, label, hierarchy");
+
+        if (inserted) {
+          const newKeywords = inserted.map((kw, i) => ({
+            id: kw.id,
+            text: kw.label,
+            hierarchy: (kw.hierarchy ?? "sub") as "main" | "sub",
+            x: 15 + Math.random() * 65,
+            y: 15 + Math.random() * 55,
+            opacity: 0,
+          }));
+
+          // Fade in new keywords
+          setCanvasKeywords((prev) => [...prev, ...newKeywords]);
+          setTimeout(() => {
+            setCanvasKeywords((prev) =>
+              prev.map((kw) => ({
+                ...kw,
+                opacity: kw.opacity === 0 ? (kw.hierarchy === "main" ? 0.9 : 0.6) : kw.opacity,
+              })),
+            );
+          }, 100);
+        }
+      }
+    } catch {
+      // Silent fail
+    } finally {
+      setIsExtracting(false);
+    }
   };
 
   const handleKeywordClick = async (keywordText: string) => {
@@ -134,7 +218,7 @@ export function ReflectionDashboard() {
             sessions={chatHistory.sessions}
             activeSessionId={null}
             onSelectSession={handleSelectSession}
-            onNewChat={handleNewSession}
+            onNewChat={() => {}}
             isLoading={chatHistory.isLoading}
           />
         </div>
@@ -180,9 +264,9 @@ export function ReflectionDashboard() {
           </div>
 
           {/* Thought Canvas */}
-          <div className="flex-1 glass !rounded-3xl p-6 relative overflow-hidden">
+          <div className="flex-1 glass !rounded-3xl p-6 relative overflow-hidden" style={{ perspective: "600px", perspectiveOrigin: "50% 45%" }}>
             {/* Ambient Particles — visible when canvas is empty */}
-            {dashboard.topKeywords.length === 0 && (
+            {(canvasKeywords.length === 0 || isExtracting) && (
               <div className="absolute inset-0 flex items-center justify-center">
                 {/* Particle field */}
                 {particles.map((p, i) => (
@@ -211,70 +295,141 @@ export function ReflectionDashboard() {
                   style={{ animationDuration: "4s" }}
                 />
                 {/* Empty state text */}
-                <p className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 text-xs text-zinc-400/60 tracking-wide">
-                  Your thoughts will appear here
+                <p
+                  className={cn(
+                    "absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 text-xs tracking-wide transition-all",
+                    isExtracting
+                      ? "text-zinc-500 animate-bounce"
+                      : "text-zinc-400/60"
+                  )}
+                >
+                  {isExtracting ? "Extracting your thoughts..." : "Your thoughts will appear here"}
                 </p>
               </div>
             )}
 
-            {/* Floating Keywords */}
+            {/* Keyword Constellation */}
             <div className="absolute inset-0">
-              {dashboard.topKeywords
-                .map((kw, i) => ({
-                  text: kw,
-                  size: i === 0 ? "lg" : i < 3 ? "md" : "sm",
-                  x: 20 + ((i * 17) % 60),
-                  y: 25 + ((i * 13) % 50),
-                  opacity: keywords[i]?.opacity ?? 0.8,
-                }))
-                .map((kw, i) => (
-                  <div
-                    key={i}
-                    onClick={() => handleKeywordClick(kw.text)}
-                    className="absolute transition-all duration-1000 cursor-pointer hover:scale-110"
-                    style={{
-                      left: `${kw.x}%`,
-                      top: `${kw.y}%`,
-                      opacity: kw.opacity ?? 0.8,
-                    }}
-                  >
+
+              {/* Main keywords — pill stays in place, note slides out */}
+              {canvasKeywords.filter(k => k.hierarchy === "main").map((kw) => {
+                const x = kw.x;
+                const y = kw.y;
+                const isExpanded = expandedMain === kw.text;
+                const hasExpanded = expandedMain !== null;
+                const isFaded = hasExpanded && !isExpanded;
+                const subs = canvasKeywords.filter(k => k.hierarchy === "sub");
+
+                // Note goes right if pill is in left half, left if in right half
+                const noteOnRight = x <= 50;
+
+                return (
+                  <div key={kw.id}>
+                    {/* Main pill — fixed position, never moves */}
                     <div
-                      className={cn(
-                        "px-4 py-2 rounded-full shadow-sm",
-                        kw.size === "lg" &&
-                          "bg-indigo-100 dark:bg-indigo-900/40 text-base font-medium text-indigo-700 dark:text-indigo-300",
-                        kw.size === "md" &&
-                          "bg-slate-100 dark:bg-slate-700/60 text-sm text-slate-600 dark:text-slate-300",
-                        kw.size === "sm" &&
-                          "bg-slate-50 dark:bg-slate-800/60 text-xs text-slate-500 dark:text-slate-400",
-                      )}
+                      className="absolute"
+                      style={{
+                        left: `${x}%`,
+                        top: `${y}%`,
+                        transform: "translate(-50%, -50%)",
+                        opacity: isFaded ? 0.15 : 1,
+                        filter: isFaded ? "blur(3px)" : "none",
+                        transition: "all 0.6s cubic-bezier(0.25, 1, 0.5, 1)",
+                      }}
                     >
-                      {kw.text}
+                      <div
+                        className="text-sm font-semibold text-slate-700 dark:text-slate-200 cursor-pointer hover:scale-105 transition-all whitespace-nowrap"
+                        onClick={() => setExpandedMain(isExpanded ? null : kw.text)}
+                      >
+                        {kw.text}
+                      </div>
                     </div>
+
+                    {/* Dashed line + Note — positioned relative to pill */}
+                    {isExpanded && (
+                      <div
+                        className="absolute flex items-center"
+                        style={{
+                          left: noteOnRight ? `${x + 5}%` : undefined,
+                          right: noteOnRight ? undefined : `${100 - x + 5}%`,
+                          top: `${y}%`,
+                          transform: "translateY(-50%)",
+                        }}
+                      >
+                        {/* Dashed connector */}
+                        <div
+                          className="h-px border-t border-dashed border-slate-300/50 dark:border-slate-600/40 shrink-0"
+                          style={{ width: 0, animation: "lineGrow 0.4s 0.1s forwards" }}
+                        />
+
+                        {/* Note card */}
+                        <div
+                          className="glass-subtle !rounded-2xl px-5 py-4 w-[200px] shrink-0 ml-1"
+                          style={{
+                            opacity: 0,
+                            animation: "notePopIn 0.6s 0.3s cubic-bezier(0.34, 1.56, 0.64, 1) forwards",
+                          }}
+                        >
+                          <div className="flex flex-col gap-1.5 mb-3">
+                            {subs.map((sub, si) => (
+                              <span
+                                key={sub.id}
+                                className="text-[11px] text-slate-500 dark:text-slate-400"
+                                style={{ opacity: 0, animation: `fadeIn 0.3s ${0.5 + si * 0.1}s forwards` }}
+                              >
+                                #{sub.text}
+                              </span>
+                            ))}
+                          </div>
+                          <div className="flex justify-end">
+                            <button
+                              onClick={(e) => {
+                                e.stopPropagation();
+                                handleKeywordClick(kw.text);
+                              }}
+                              className="text-[10px] text-slate-400 hover:text-slate-700 dark:hover:text-slate-200 transition-all hover:-translate-y-0.5"
+                              style={{ opacity: 0, animation: `fadeIn 0.3s ${0.5 + subs.length * 0.1 + 0.1}s forwards` }}
+                            >
+                              Deep Dive →
+                            </button>
+                          </div>
+                        </div>
+                      </div>
+                    )}
                   </div>
-                ))}
+                );
+              })}
             </div>
 
             {/* Input */}
             <div className="absolute inset-x-0 bottom-6 flex justify-center px-6">
               <div className="w-full max-w-xl">
                 <div className="relative rounded-2xl bg-slate-100/90 dark:bg-slate-700/60 overflow-hidden">
-                  <Input
+                  <textarea
                     value={inputValue}
-                    onChange={(e) => setInputValue(e.target.value)}
+                    onChange={(e) => {
+                      setInputValue(e.target.value);
+                      // Auto-resize
+                      e.target.style.height = "auto";
+                      e.target.style.height = Math.min(e.target.scrollHeight, 160) + "px";
+                    }}
                     onKeyDown={(e) => {
-                      if (e.key === "Enter" && inputValue.trim()) {
-                        handleNewSession();
+                      if (e.key === "Enter" && !e.shiftKey && inputValue.trim()) {
+                        e.preventDefault();
+                        handleExtract();
                       }
                     }}
                     placeholder="What's on your mind?"
-                    className="h-12 px-5 pr-12 bg-transparent border-0 text-slate-800 dark:text-white placeholder:text-slate-400 focus-visible:ring-0"
+                    disabled={isExtracting}
+                    rows={1}
+                    className="w-full min-h-[48px] max-h-[160px] px-5 py-3 pr-12 bg-transparent text-sm text-slate-800 dark:text-white placeholder:text-slate-400 focus:outline-none resize-none overflow-y-auto"
                   />
                   <Button
                     size="icon"
                     variant="ghost"
-                    onClick={handleNewSession}
-                    className="absolute right-2 top-1/2 -translate-y-1/2 h-8 w-8 rounded-xl text-slate-500 hover:text-indigo-600 hover:bg-indigo-50"
+                    onClick={handleExtract}
+                    disabled={isExtracting}
+                    className="absolute right-2 bottom-2 h-8 w-8 rounded-xl text-slate-500 hover:text-indigo-600 hover:bg-indigo-50 disabled:opacity-50 disabled:cursor-not-allowed"
                   >
                     <Zap className="h-4 w-4" />
                   </Button>

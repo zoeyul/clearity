@@ -342,6 +342,28 @@
   border-color: rgba(161, 161, 170, 0.22);
 }
 
+/* ─── UI animations ─── */
+@keyframes fadeIn {
+  from { opacity: 0; transform: translateY(4px); }
+  to { opacity: 1; transform: translateY(0); }
+}
+
+@keyframes lineGrow {
+  from { width: 0; }
+  to { width: 60px; }
+}
+
+@keyframes notePopIn {
+  from {
+    opacity: 0;
+    transform: translateZ(-40px) scale(0.8);
+  }
+  to {
+    opacity: 1;
+    transform: translateZ(20px) scale(1);
+  }
+}
+
 /* ─── Particle animation ─── */
 @keyframes float-particle {
   0%, 100% {

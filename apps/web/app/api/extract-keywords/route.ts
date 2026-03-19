@@ -17,8 +17,10 @@ export async function POST(req: Request) {
 
   const google = createGoogleGenerativeAI({ apiKey })
 
+  try {
   const { object } = await generateObject({
-    model: google("gemini-2.0-flash"),
+    model: google("gemini-2.5-flash"),
+    maxRetries: 0,
     schema: KeywordSchema,
     prompt: `Analyze this user message and extract the core topics they're thinking about.
 
@@ -33,4 +35,12 @@ User message: "${message}"`,
   })
 
   return Response.json(object)
+  } catch (error: unknown) {
+    const err = error as { statusCode?: number; message?: string }
+    console.error("[extract-keywords]", err.statusCode ?? 500, err.message ?? error)
+    return Response.json(
+      { error: err.message ?? "Extraction failed" },
+      { status: err.statusCode ?? 500 }
+    )
+  }
 }

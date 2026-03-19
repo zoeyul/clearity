@@ -20,11 +20,13 @@ export async function POST(req: Request) {
     );
   }
 
-  const google = createGoogleGenerativeAI({ apiKey });
+  try {
+    const google = createGoogleGenerativeAI({ apiKey });
 
-  const result = streamText({
-    model: google("gemini-2.0-flash"),
-    system: `You are Clara, a thoughtful AI companion for Clearity — an app that helps people organize their thoughts and find clarity.
+    const result = streamText({
+      model: google("gemini-2.5-flash"),
+      maxRetries: 0,
+      system: `You are Clara, a thoughtful AI companion for Clearity — an app that helps people organize their thoughts and find clarity.
 
 Your role:
 - Help users untangle complex thoughts, not provide therapy
@@ -39,8 +41,15 @@ Style:
 - When they're overwhelmed, help break things into smaller pieces
 - When they're unclear, help them articulate what they actually mean
 ${aboutMe ? `\nAbout the user:\n${aboutMe}` : ""}`,
-    messages: await convertToModelMessages(messages),
-  });
+      messages: await convertToModelMessages(messages),
+    });
 
-  return result.toUIMessageStreamResponse();
+    return result.toUIMessageStreamResponse();
+  } catch (error: unknown) {
+    const err = error as { statusCode?: number; message?: string };
+    console.error("[chat]", err.statusCode ?? 500, err.message ?? error);
+    return new Response(err.message ?? "Chat failed", {
+      status: err.statusCode ?? 500,
+    });
+  }
 }
