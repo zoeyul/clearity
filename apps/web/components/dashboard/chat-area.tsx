@@ -3,9 +3,9 @@
 import { useState, useRef, useEffect } from "react"
 import { useChat } from "@ai-sdk/react"
 import { TextStreamChatTransport } from "ai"
+import { motion } from "framer-motion"
 import { Button } from "@clearity/ui"
 import { Input } from "@clearity/ui"
-import { Avatar, AvatarFallback } from "@clearity/ui"
 import {
   Sheet,
   SheetContent,
@@ -13,11 +13,9 @@ import {
 } from "@clearity/ui"
 import {
   Send,
-  Sparkles,
   CheckCircle2,
-  User,
   Menu,
-  BarChart3,
+  Sparkles,
 } from "lucide-react"
 import { cn } from "@clearity/ui/lib/utils"
 
@@ -26,6 +24,7 @@ interface ChatAreaProps {
   sessionStatus: "active" | "completed"
   onFinishSession: () => Promise<unknown>
   isLoading: boolean
+  keyword?: string
 }
 
 export function ChatArea({
@@ -33,8 +32,11 @@ export function ChatArea({
   sessionStatus,
   onFinishSession,
   isLoading,
+  keyword,
 }: ChatAreaProps) {
   const [inputValue, setInputValue] = useState("")
+  const [headerKeyword, setHeaderKeyword] = useState<string | null>(keyword ?? null)
+  const [subKeywords, setSubKeywords] = useState<string[]>([])
   const scrollRef = useRef<HTMLDivElement>(null)
 
   const apiKey = typeof window !== "undefined" ? localStorage.getItem("clearity-api-key") : null
@@ -58,10 +60,51 @@ export function ChatArea({
     }
   }, [messages.length, status])
 
-  const handleSend = () => {
+  const handleSend = async () => {
     if (!inputValue.trim() || isStreaming || sessionStatus === "completed" || noApiKey) return
-    sendMessage({ text: inputValue })
+
+    const messageText = inputValue
+    sendMessage({ text: messageText })
     setInputValue("")
+
+    // Extract keywords from first message via Gemini
+    if (!headerKeyword && messages.length === 0) {
+      try {
+        const res = await fetch("/api/extract-keywords", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ message: messageText, apiKey }),
+        })
+        if (res.ok) {
+          const data = await res.json()
+          setHeaderKeyword(data.main)
+          setSubKeywords(data.subs ?? [])
+
+          // Update session title in DB
+          const supabase = (await import("@clearity/lib")).createClient()
+          await supabase
+            .from("chat_sessions")
+            .update({ title: data.sessionTitle })
+            .eq("id", sessionId)
+
+          // Save keywords to DB
+          const keywordsToInsert = [
+            { session_id: sessionId, label: data.main, intensity: "high" as const },
+            ...(data.subs ?? []).map((sub: string) => ({
+              session_id: sessionId,
+              label: sub,
+              intensity: "medium" as const,
+            })),
+          ]
+          await supabase.from("session_keywords").insert(keywordsToInsert)
+        }
+      } catch {
+        // Fallback: use simple extraction
+        const words = messageText.trim().split(/\s+/)
+        const extracted = words.filter(w => w.length > 3).sort((a, b) => b.length - a.length)[0] ?? words[0]
+        setHeaderKeyword(extracted)
+      }
+    }
   }
 
   const handleFinish = async () => {
@@ -71,8 +114,9 @@ export function ChatArea({
   return (
     <div className="glass flex h-full flex-col">
       {/* Header */}
-      <header className="relative z-10 flex items-center justify-between border-b border-white/15 px-4 py-4 lg:px-6">
+      <header className="relative z-10 flex items-center justify-between border-b border-white/15 px-4 py-3 lg:px-6">
         <div className="flex items-center gap-3">
+          {/* Mobile menu */}
           <Sheet>
             <SheetTrigger asChild>
               <Button variant="ghost" size="icon" className="glass-interactive lg:hidden !rounded-2xl !border-transparent !bg-transparent text-zinc-700 dark:text-zinc-300">
@@ -83,34 +127,57 @@ export function ChatArea({
             <SheetContent side="left" className="w-[280px] p-5 bg-transparent border-none" />
           </Sheet>
 
-          <div className="glass-solid flex h-10 w-10 items-center justify-center !rounded-2xl">
-            <Sparkles className="h-5 w-5 text-white" />
-          </div>
-          <div>
-            <h1 className="text-lg font-semibold text-zinc-800 dark:text-zinc-100">Clara</h1>
-            <p className="text-sm text-zinc-500 dark:text-zinc-400">Analytical & Empathetic</p>
-          </div>
+          {/* Dynamic keyword header */}
+          {headerKeyword ? (
+            <motion.div
+              initial={{ opacity: 0, y: -5 }}
+              animate={{ opacity: 1, y: 0 }}
+              transition={{ duration: 0.5, ease: "easeOut" }}
+            >
+              <p className="text-xs text-zinc-400 dark:text-zinc-500">Focusing on</p>
+              <div className="flex items-center gap-2">
+                <p className="text-sm font-semibold text-zinc-800 dark:text-zinc-100">{headerKeyword}</p>
+                {subKeywords.length > 0 && (
+                  <div className="flex gap-1">
+                    {subKeywords.map((sub, i) => (
+                      <motion.span
+                        key={sub}
+                        initial={{ opacity: 0, scale: 0.8 }}
+                        animate={{ opacity: 1, scale: 1 }}
+                        transition={{ duration: 0.3, delay: 0.3 + i * 0.15 }}
+                        className="text-[10px] px-2 py-0.5 rounded-full bg-zinc-200/50 dark:bg-zinc-700/50 text-zinc-500 dark:text-zinc-400"
+                      >
+                        {sub}
+                      </motion.span>
+                    ))}
+                  </div>
+                )}
+              </div>
+            </motion.div>
+          ) : (
+            <p className="text-xs text-zinc-400 dark:text-zinc-500">New conversation</p>
+          )}
         </div>
-        <div className="flex items-center gap-2">
-          <Sheet>
-            <SheetTrigger asChild>
-              <Button variant="ghost" size="icon" className="glass-interactive xl:hidden !rounded-2xl !border-transparent !bg-transparent text-zinc-700 dark:text-zinc-300">
-                <BarChart3 className="h-5 w-5" />
-                <span className="sr-only">Open insights</span>
-              </Button>
-            </SheetTrigger>
-            <SheetContent side="right" className="w-[320px] p-5 bg-transparent border-none" />
-          </Sheet>
 
-          <Button
-            onClick={handleFinish}
-            disabled={sessionStatus === "completed"}
-            className="glass-solid gap-2 !rounded-2xl px-5 py-2"
+        {/* Clarify button — appears with keyword */}
+        {headerKeyword && (
+          <motion.div
+            initial={{ opacity: 0, scale: 0.95 }}
+            animate={{ opacity: 1, scale: 1 }}
+            transition={{ duration: 0.4, delay: 0.2, ease: "easeOut" }}
           >
-            <CheckCircle2 className="h-4 w-4" />
-            Clarify
-          </Button>
-        </div>
+            <Button
+              onClick={handleFinish}
+              disabled={sessionStatus === "completed"}
+              variant="outline"
+              size="sm"
+              className="glass-subtle gap-2 !rounded-xl text-zinc-600 dark:text-zinc-300 transition-all hover:-translate-y-0.5 hover:shadow-lg active:translate-y-0 active:scale-[0.98]"
+            >
+              <CheckCircle2 className="h-4 w-4" />
+              Clarify
+            </Button>
+          </motion.div>
+        )}
       </header>
 
       {/* Messages */}
@@ -127,8 +194,28 @@ export function ChatArea({
             </div>
           </div>
         ) : messages.length === 0 ? (
-          <div className="flex items-center justify-center h-full">
-            <p className="text-sm text-zinc-400">Start a conversation...</p>
+          <div className="flex flex-col pt-12 pb-6 px-2">
+            {/* Greeting message */}
+            <motion.div
+              initial={{ opacity: 0, y: 10 }}
+              animate={{ opacity: 1, y: 0 }}
+              transition={{ duration: 0.6, ease: "easeOut" }}
+              className="relative glass-subtle !rounded-3xl px-5 py-3.5 text-sm leading-relaxed text-zinc-800 dark:text-zinc-200 w-fit border-l-2 border-l-zinc-300/40 dark:border-l-zinc-600/40"
+            >
+              <Sparkles className="absolute -top-3.5 -left-3.5 h-4 w-4 text-zinc-300 dark:text-zinc-600" />
+              {keyword ? (
+                <>
+                  I see you&apos;re focusing on &apos;
+                  <span className="font-semibold text-sky-600 dark:text-sky-400 drop-shadow-[0_0_6px_rgba(56,189,248,0.4)]">
+                    {keyword}
+                  </span>
+                  &apos;. Want to dig deeper, or is there something specific about it that&apos;s been stuck?
+                </>
+              ) : (
+                "What's been on your mind lately? No need to organize it — just start wherever feels right."
+              )}
+            </motion.div>
+
           </div>
         ) : (
           <div className="flex flex-col gap-6 py-6">
@@ -136,36 +223,31 @@ export function ChatArea({
               <div
                 key={message.id}
                 className={cn(
-                  "flex gap-3",
-                  message.role === "user" && "flex-row-reverse"
+                  "flex",
+                  message.role === "user" ? "justify-end" : "justify-start"
                 )}
               >
-                <Avatar className={cn("h-9 w-9 shrink-0 rounded-2xl", message.role === "assistant" && "shadow-[0_4px_16px_rgba(31,38,135,0.1)]")}>
-                  <AvatarFallback className={cn("rounded-2xl", message.role === "assistant" ? "glass-solid !rounded-2xl" : "glass-subtle !rounded-2xl text-zinc-700 dark:text-zinc-300")}>
-                    {message.role === "assistant" ? <Sparkles className="h-4 w-4" /> : <User className="h-4 w-4" />}
-                  </AvatarFallback>
-                </Avatar>
-                <div className={cn("flex max-w-[70%] flex-col gap-1", message.role === "user" && "items-end")}>
-                  <div className={cn(
-                    "glass-subtle !rounded-3xl px-5 py-3.5 text-sm leading-relaxed text-zinc-800 dark:text-zinc-200",
-                    message.role === "user" && "!bg-white/20 dark:!bg-white/8"
-                  )}>
-                    {message.parts.map((part, i) => {
-                      if (part.type === "text") return <span key={i}>{part.text}</span>
-                      return null
-                    })}
-                  </div>
+                <div
+                  className={cn(
+                    "relative glass-subtle !rounded-3xl px-5 py-3.5 text-sm leading-relaxed text-zinc-800 dark:text-zinc-200 max-w-[70%] w-fit",
+                    message.role === "user"
+                      ? "!bg-white/20 dark:!bg-white/8"
+                      : "border-l-2 border-l-zinc-300/40 dark:border-l-zinc-600/40",
+                  )}
+                >
+                  {message.role === "assistant" && (
+                    <Sparkles className="absolute -top-3.5 -left-3.5 h-4 w-4 text-zinc-300 dark:text-zinc-600" />
+                  )}
+                  {message.parts.map((part, i) => {
+                    if (part.type === "text") return <span key={i}>{part.text}</span>
+                    return null
+                  })}
                 </div>
               </div>
             ))}
             {isStreaming && messages[messages.length - 1]?.role !== "assistant" && (
-              <div className="flex gap-3">
-                <Avatar className="h-9 w-9 shrink-0 rounded-2xl">
-                  <AvatarFallback className="glass-solid !rounded-2xl">
-                    <Sparkles className="h-4 w-4 animate-pulse" />
-                  </AvatarFallback>
-                </Avatar>
-                <div className="glass-subtle !rounded-3xl px-5 py-3.5">
+              <div className="flex justify-start">
+                <div className="glass-subtle !rounded-3xl px-5 py-3.5 border-l-2 border-l-zinc-300/40 dark:border-l-zinc-600/40">
                   <div className="flex gap-1">
                     <span className="h-2 w-2 rounded-full bg-zinc-400 animate-bounce" style={{ animationDelay: "0ms" }} />
                     <span className="h-2 w-2 rounded-full bg-zinc-400 animate-bounce" style={{ animationDelay: "150ms" }} />

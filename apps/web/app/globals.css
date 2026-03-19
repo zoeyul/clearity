@@ -244,14 +244,13 @@
 .glass-solid:hover {
   background: linear-gradient(
     160deg,
-    rgba(39, 39, 42, 0.88) 0%,
-    rgba(30, 30, 33, 0.95) 100%
+    rgba(39, 39, 42, 0.85) 0%,
+    rgba(30, 30, 33, 0.92) 100%
   );
-  border-color: rgba(255, 255, 255, 0.25);
+  border-color: rgba(255, 255, 255, 0.22);
   box-shadow:
-    0 12px 48px rgba(24, 24, 27, 0.35),
-    0 4px 12px rgba(24, 24, 27, 0.18),
-    inset 0 1.5px 0 rgba(255, 255, 255, 0.25);
+    0 8px 24px rgba(24, 24, 27, 0.15),
+    inset 0 1.5px 0 rgba(255, 255, 255, 0.2);
   transform: translateY(-1px);
 }
 
@@ -341,4 +340,24 @@
     rgba(113, 113, 122, 0.22) 100%
   );
   border-color: rgba(161, 161, 170, 0.22);
+}
+
+/* ─── Particle animation ─── */
+@keyframes float-particle {
+  0%, 100% {
+    transform: translate(0, 0) scale(1);
+    opacity: 0.2;
+  }
+  25% {
+    transform: translate(15px, -20px) scale(1.2);
+    opacity: 0.4;
+  }
+  50% {
+    transform: translate(-10px, -35px) scale(0.8);
+    opacity: 0.15;
+  }
+  75% {
+    transform: translate(20px, -15px) scale(1.1);
+    opacity: 0.35;
+  }
 }

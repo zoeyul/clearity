@@ -1,5 +1,37 @@
 # Clearity Project Guidelines
 
+## About Clearity
+
+### What it is
+Clearity is a personal thought-organizing app. It's not a therapist or a counseling service — it's a tool that helps people **untangle complex thoughts, find direction, and gain clarity** when their mind feels overwhelmed.
+
+### Core Philosophy
+- **"A mirror for your mind"** — The app reflects your thinking back to you in an organized way, helping you see patterns you couldn't see on your own
+- **Not emotional support, but cognitive support** — Focus on structuring thoughts, identifying patterns, and finding actionable next steps
+- **Day-by-day progression** — Users track their mental landscape over time, seeing how their thinking evolves
+
+### What users come here for
+- Too many thoughts, don't know where to start
+- Need to make a decision but can't organize the factors
+- Want to understand recurring patterns in their thinking
+- Looking for direction, not comfort
+
+### Tone & Voice (Clara, the AI companion)
+- Warm but concise — no long monologues
+- Asks reflective questions rather than giving answers
+- Mirrors the user's language level
+- When overwhelmed → break things into smaller pieces
+- When unclear → help articulate what they actually mean
+- Never preachy, never therapeutic jargon
+
+### Slogan
+"Clear your mind, find your clarity"
+
+### Target User
+People who think a lot, feel stuck, and want a structured way to process their thoughts — not people in crisis or seeking mental health treatment
+
+---
+
 ## UI Theme Rules
 
 ### Background

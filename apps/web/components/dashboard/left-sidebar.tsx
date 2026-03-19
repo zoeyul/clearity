@@ -1,8 +1,6 @@
 "use client"
 
-import { Button } from "@clearity/ui"
 import {
-  Plus,
   Sparkles,
   Clock,
   Settings,
@@ -53,18 +51,6 @@ export function LeftSidebar({
         </button>
       </div>
 
-      {/* New Chat Button */}
-      <div className="relative z-10 px-4 py-4">
-        <Button
-          onClick={onNewChat}
-          className="glass-solid w-full justify-start gap-2 !rounded-2xl border-0"
-          size="lg"
-        >
-          <Plus className="h-4 w-4" />
-          New Chat
-        </Button>
-      </div>
-
       {/* Navigation */}
       <div className="relative z-10 flex-1 px-4 py-4">
         <div className="flex flex-col gap-1">
@@ -74,7 +60,7 @@ export function LeftSidebar({
             <button
               key={item.label}
               onClick={() => router.push(item.href)}
-              className="glass-subtle flex items-center justify-between !rounded-2xl px-3 py-2.5 text-sm text-zinc-700 dark:text-zinc-300"
+              className="glass-subtle flex items-center justify-between !rounded-2xl px-3 py-2.5 text-sm text-zinc-700 dark:text-zinc-300 transition-all hover:-translate-y-0.5 hover:shadow-lg active:translate-y-0 active:scale-[0.98]"
             >
               <div className="flex items-center gap-3">
                 <item.icon className="h-4 w-4 text-zinc-500 dark:text-zinc-400" />
@@ -90,14 +76,14 @@ export function LeftSidebar({
       <div className="relative z-10 border-t border-white/15 px-4 py-4 flex flex-col gap-2">
         <button
           onClick={() => router.push("/settings")}
-          className="glass-subtle flex w-full items-center gap-3 !rounded-2xl px-3 py-2.5 text-sm text-zinc-700 dark:text-zinc-300"
+          className="glass-subtle flex w-full items-center gap-3 !rounded-2xl px-3 py-2.5 text-sm text-zinc-700 dark:text-zinc-300 transition-all hover:-translate-y-0.5 hover:shadow-lg active:translate-y-0 active:scale-[0.98]"
         >
           <Settings className="h-4 w-4 text-zinc-500 dark:text-zinc-400" />
           <span>Settings</span>
         </button>
         <button
           onClick={handleSignOut}
-          className="glass-subtle flex w-full items-center gap-3 !rounded-2xl px-3 py-2.5 text-sm text-zinc-700 dark:text-zinc-300"
+          className="glass-subtle flex w-full items-center gap-3 !rounded-2xl px-3 py-2.5 text-sm text-zinc-700 dark:text-zinc-300 transition-all hover:-translate-y-0.5 hover:shadow-lg active:translate-y-0 active:scale-[0.98]"
         >
           <LogOut className="h-4 w-4 text-zinc-500 dark:text-zinc-400" />
           <span>Sign Out</span>
