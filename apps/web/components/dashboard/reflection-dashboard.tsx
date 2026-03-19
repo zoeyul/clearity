@@ -19,8 +19,32 @@ export function ReflectionDashboard() {
   const [isExtracting, setIsExtracting] = useState(false);
   const [expandedMain, setExpandedMain] = useState<string | null>(null);
   const [canvasKeywords, setCanvasKeywords] = useState<
-    { id: string; text: string; hierarchy: "main" | "sub"; x: number; y: number; opacity: number }[]
+    { id: string; text: string; hierarchy: "main" | "sub"; parentId?: string; opacity: number }[]
   >([]);
+  const [hasApiKey, setHasApiKey] = useState(true);
+
+  // Golden angle spiral layout
+  const calcPositions = (count: number) => {
+    const goldenAngle = Math.PI * (3 - Math.sqrt(5));
+    return Array.from({ length: count }, (_, i) => {
+      const angle = i * goldenAngle;
+      const radius = Math.min(35, 8 + i * 4);
+      return {
+        x: 50 + radius * Math.cos(angle),
+        y: 45 + radius * Math.sin(angle) * 0.7,
+      };
+    });
+  };
+
+  const mainKeywords = useMemo(
+    () => canvasKeywords.filter(k => k.hierarchy === "main"),
+    [canvasKeywords],
+  );
+
+  const keywordPositions = useMemo(
+    () => calcPositions(mainKeywords.length),
+    [mainKeywords.length],
+  );
 
   // Fixed particle positions
   const particles = useMemo(
@@ -35,6 +59,12 @@ export function ReflectionDashboard() {
     [],
   );
 
+  // Check for API key
+  useEffect(() => {
+    const key = typeof window !== "undefined" ? localStorage.getItem("clearity-api-key") : null;
+    setHasApiKey(!!key);
+  }, []);
+
   // Load existing fragment keywords from DB
   useEffect(() => {
     const loadKeywords = async () => {
@@ -43,17 +73,16 @@ export function ReflectionDashboard() {
 
       const { data } = await supabase
         .from("session_keywords")
-        .select("id, label, hierarchy, status")
+        .select("id, label, hierarchy, status, parent_id")
         .eq("user_id", user.id)
         .in("status", ["fragment", "clustered", "core"]);
 
       if (data && data.length > 0) {
-        setCanvasKeywords(data.map((kw, i) => ({
+        setCanvasKeywords(data.map((kw) => ({
           id: kw.id,
           text: kw.label,
           hierarchy: (kw.hierarchy ?? "sub") as "main" | "sub",
-          x: 15 + ((i * 19) % 65),
-          y: 15 + ((i * 23) % 55),
+          parentId: kw.parent_id ?? undefined,
           opacity: kw.status === "core" ? 1 : kw.status === "clustered" ? 0.8 : 0.6,
         })));
       }
@@ -80,7 +109,10 @@ export function ReflectionDashboard() {
     if (!inputValue.trim() || isExtracting) return;
 
     const apiKey = typeof window !== "undefined" ? localStorage.getItem("clearity-api-key") : null;
-    if (!apiKey) return;
+    if (!apiKey) {
+      router.push("/settings");
+      return;
+    }
 
     setIsExtracting(true);
     const text = inputValue;
@@ -102,28 +134,43 @@ export function ReflectionDashboard() {
         const { data: { user } } = await supabase.auth.getUser();
         if (!user) return;
 
-        // Save to DB as fragments
-        const toInsert = [
-          { label: data.main, intensity: "high", hierarchy: "main", status: "fragment", user_id: user.id },
-          ...(data.subs ?? []).map((sub: string) => ({
-            label: sub, intensity: "medium", hierarchy: "sub", status: "fragment", user_id: user.id,
-          })),
-        ];
-
-        const { data: inserted } = await supabase
+        // Insert main keyword first
+        const { data: mainInserted } = await supabase
           .from("session_keywords")
-          .insert(toInsert)
-          .select("id, label, hierarchy");
+          .insert({ label: data.main, intensity: "high", hierarchy: "main", status: "fragment", user_id: user.id })
+          .select("id, label, hierarchy")
+          .single();
 
-        if (inserted) {
-          const newKeywords = inserted.map((kw, i) => ({
-            id: kw.id,
-            text: kw.label,
-            hierarchy: (kw.hierarchy ?? "sub") as "main" | "sub",
-            x: 15 + Math.random() * 65,
-            y: 15 + Math.random() * 55,
+        if (mainInserted) {
+          const newKeywords: typeof canvasKeywords = [{
+            id: mainInserted.id,
+            text: mainInserted.label,
+            hierarchy: "main",
             opacity: 0,
-          }));
+          }];
+
+          // Insert sub keywords with parent_id
+          if (data.subs?.length) {
+            const subsToInsert = data.subs.map((sub: string) => ({
+              label: sub, intensity: "medium", hierarchy: "sub", status: "fragment",
+              user_id: user.id, parent_id: mainInserted.id,
+            }));
+
+            const { data: subsInserted } = await supabase
+              .from("session_keywords")
+              .insert(subsToInsert)
+              .select("id, label, hierarchy");
+
+            if (subsInserted) {
+              newKeywords.push(...subsInserted.map((kw) => ({
+                id: kw.id,
+                text: kw.label,
+                hierarchy: "sub" as const,
+                parentId: mainInserted.id,
+                opacity: 0,
+              })));
+            }
+          }
 
           // Fade in new keywords
           setCanvasKeywords((prev) => [...prev, ...newKeywords]);
@@ -309,72 +356,76 @@ export function ReflectionDashboard() {
             )}
 
             {/* Keyword Constellation */}
-            <div className="absolute inset-0">
+            <div className="absolute inset-0 pointer-events-none z-10">
 
               {/* Main keywords — pill stays in place, note slides out */}
-              {canvasKeywords.filter(k => k.hierarchy === "main").map((kw) => {
-                const x = kw.x;
-                const y = kw.y;
+              {mainKeywords.map((kw, i) => {
+                const pos = keywordPositions[i];
+                if (!pos) return null;
+                const x = pos.x;
+                const y = pos.y;
                 const isExpanded = expandedMain === kw.text;
-                const hasExpanded = expandedMain !== null;
-                const isFaded = hasExpanded && !isExpanded;
-                const subs = canvasKeywords.filter(k => k.hierarchy === "sub");
-
-                // Note goes right if pill is in left half, left if in right half
+                const isFaded = expandedMain !== null && !isExpanded;
+                const subs = canvasKeywords.filter(k => k.hierarchy === "sub" && k.parentId === kw.id);
                 const noteOnRight = x <= 50;
 
                 return (
-                  <div key={kw.id}>
-                    {/* Main pill — fixed position, never moves */}
+                  <div
+                    key={kw.id}
+                    className="absolute pointer-events-auto"
+                    style={{
+                      left: `${x}%`,
+                      top: `${y}%`,
+                      opacity: isFaded ? 0.15 : 1,
+                      filter: isFaded ? "blur(3px)" : "none",
+                      transition: "opacity 0.4s, filter 0.4s",
+                      animation: `keyword-bounce ${3 + i * 0.4}s ease-in-out infinite`,
+                      animationDelay: `${i * 0.6}s`,
+                    }}
+                  >
                     <div
-                      className="absolute"
-                      style={{
-                        left: `${x}%`,
-                        top: `${y}%`,
-                        transform: "translate(-50%, -50%)",
-                        opacity: isFaded ? 0.15 : 1,
-                        filter: isFaded ? "blur(3px)" : "none",
-                        transition: "all 0.6s cubic-bezier(0.25, 1, 0.5, 1)",
-                      }}
+                      className="text-sm font-semibold text-slate-700 dark:text-slate-200 cursor-pointer hover:scale-105 transition-all whitespace-nowrap"
+                      onClick={() => setExpandedMain(isExpanded ? null : kw.text)}
                     >
-                      <div
-                        className="text-sm font-semibold text-slate-700 dark:text-slate-200 cursor-pointer hover:scale-105 transition-all whitespace-nowrap"
-                        onClick={() => setExpandedMain(isExpanded ? null : kw.text)}
-                      >
-                        {kw.text}
-                      </div>
+                      {kw.text}
                     </div>
 
-                    {/* Dashed line + Note — positioned relative to pill */}
+                    {/* Note — positioned relative to keyword via left/right: 100% */}
                     {isExpanded && (
                       <div
-                        className="absolute flex items-center"
+                        className="absolute flex items-center pointer-events-none"
                         style={{
-                          left: noteOnRight ? `${x + 5}%` : undefined,
-                          right: noteOnRight ? undefined : `${100 - x + 5}%`,
-                          top: `${y}%`,
+                          top: "50%",
                           transform: "translateY(-50%)",
+                          ...(noteOnRight
+                            ? { left: "100%", paddingLeft: "8px" }
+                            : { right: "100%", paddingRight: "8px", flexDirection: "row-reverse" as const }),
+                          zIndex: 25,
                         }}
                       >
                         {/* Dashed connector */}
                         <div
-                          className="h-px border-t border-dashed border-slate-300/50 dark:border-slate-600/40 shrink-0"
-                          style={{ width: 0, animation: "lineGrow 0.4s 0.1s forwards" }}
+                          className="shrink-0"
+                          style={{
+                            width: 0,
+                            height: "1px",
+                            borderTop: "1.5px dashed rgba(150, 160, 180, 0.5)",
+                            animation: "lineGrow 0.4s 0.1s forwards",
+                          }}
                         />
-
                         {/* Note card */}
                         <div
-                          className="glass-subtle !rounded-2xl px-5 py-4 w-[200px] shrink-0 ml-1"
+                          className={`glass-subtle !rounded-2xl px-5 py-4 w-[180px] shrink-0 pointer-events-auto ${noteOnRight ? "ml-1" : "mr-1"}`}
                           style={{
                             opacity: 0,
-                            animation: "notePopIn 0.6s 0.3s cubic-bezier(0.34, 1.56, 0.64, 1) forwards",
+                            animation: "fadeIn 0.3s 0.3s ease-out forwards",
                           }}
                         >
                           <div className="flex flex-col gap-1.5 mb-3">
                             {subs.map((sub, si) => (
                               <span
                                 key={sub.id}
-                                className="text-[11px] text-slate-500 dark:text-slate-400"
+                                className="text-[11px] text-slate-700 dark:text-slate-400"
                                 style={{ opacity: 0, animation: `fadeIn 0.3s ${0.5 + si * 0.1}s forwards` }}
                               >
                                 #{sub.text}
@@ -387,7 +438,7 @@ export function ReflectionDashboard() {
                                 e.stopPropagation();
                                 handleKeywordClick(kw.text);
                               }}
-                              className="text-[10px] text-slate-400 hover:text-slate-700 dark:hover:text-slate-200 transition-all hover:-translate-y-0.5"
+                              className="text-[10px] text-slate-400 hover:text-slate-700 dark:hover:text-slate-200 transition-colors cursor-pointer"
                               style={{ opacity: 0, animation: `fadeIn 0.3s ${0.5 + subs.length * 0.1 + 0.1}s forwards` }}
                             >
                               Deep Dive →
@@ -414,7 +465,7 @@ export function ReflectionDashboard() {
                       e.target.style.height = Math.min(e.target.scrollHeight, 160) + "px";
                     }}
                     onKeyDown={(e) => {
-                      if (e.key === "Enter" && !e.shiftKey && inputValue.trim()) {
+                      if (e.key === "Enter" && !e.shiftKey && !e.nativeEvent.isComposing && inputValue.trim()) {
                         e.preventDefault();
                         handleExtract();
                       }
@@ -428,15 +479,21 @@ export function ReflectionDashboard() {
                     size="icon"
                     variant="ghost"
                     onClick={handleExtract}
-                    disabled={isExtracting}
+                    disabled={isExtracting || !inputValue.trim()}
                     className="absolute right-2 bottom-2 h-8 w-8 rounded-xl text-slate-500 hover:text-indigo-600 hover:bg-indigo-50 disabled:opacity-50 disabled:cursor-not-allowed"
                   >
-                    <Zap className="h-4 w-4" />
+                    <Zap className="h-4 w-4" fill={inputValue.trim() ? "currentColor" : "none"} />
                   </Button>
                 </div>
-                <p className="text-center text-[11px] text-slate-400 mt-2">
-                  Your thoughts become interconnected patterns
-                </p>
+                {!hasApiKey ? (
+                  <p className="text-center text-[11px] text-amber-500 mt-2">
+                    API key required — go to Settings to add your Gemini key
+                  </p>
+                ) : (
+                  <p className="text-center text-[11px] text-slate-400 mt-2">
+                    Your thoughts become interconnected patterns
+                  </p>
+                )}
               </div>
             </div>
           </div>

@@ -356,11 +356,11 @@
 @keyframes notePopIn {
   from {
     opacity: 0;
-    transform: translateZ(-40px) scale(0.8);
+    transform: translate(-50%, -50%) scale(0.85) translateZ(-30px);
   }
   to {
     opacity: 1;
-    transform: translateZ(20px) scale(1);
+    transform: translate(-50%, -50%) scale(1) translateZ(10px);
   }
 }
 
@@ -381,5 +381,17 @@
   75% {
     transform: translate(20px, -15px) scale(1.1);
     opacity: 0.35;
+  }
+}
+
+/* ─── Keyword bounce animation ─── */
+@keyframes keyword-bounce {
+  0%, 100% {
+    transform: translate(-50%, -50%) translateY(0);
+    animation-timing-function: cubic-bezier(0.4, 0, 0.2, 1);
+  }
+  50% {
+    transform: translate(-50%, -50%) translateY(-5px);
+    animation-timing-function: cubic-bezier(0.8, 0, 0.6, 1);
   }
 }
