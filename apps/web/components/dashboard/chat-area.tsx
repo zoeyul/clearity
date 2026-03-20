@@ -205,7 +205,7 @@ export function ChatArea({
               {keyword ? (
                 <>
                   I see you&apos;re focusing on &apos;
-                  <span className="font-semibold text-sky-600 dark:text-sky-400 drop-shadow-[0_0_6px_rgba(56,189,248,0.4)]">
+                  <span className="font-semibold">
                     {keyword}
                   </span>
                   &apos;. Want to dig deeper, or is there something specific about it that&apos;s been stuck?

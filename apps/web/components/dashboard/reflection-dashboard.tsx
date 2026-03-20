@@ -3,24 +3,15 @@
 import { useEffect, useState, useMemo, useRef } from "react";
 import { useRouter } from "next/navigation";
 import { Button, Checkbox } from "@clearity/ui";
-import { Sparkles, Zap, GitBranch } from "lucide-react";
+import { Zap, GitBranch } from "lucide-react";
+import { LoadingScreen } from "@/components/loading-screen";
 import { cn } from "@clearity/ui/lib/utils";
 import { createClient } from "@clearity/lib";
 import { useDashboard } from "@/hooks/use-dashboard";
 import { useChatHistory } from "@/hooks/use-chat-history";
 import { LeftSidebar } from "@/components/dashboard/left-sidebar";
-import { forceSimulation, forceLink, forceManyBody, forceCenter, forceCollide, type SimulationNodeDatum, type SimulationLinkDatum } from "d3-force";
-function cosineSimilarity(a: number[], b: number[]): number {
-  if (a.length !== b.length) return 0;
-  let dot = 0, magA = 0, magB = 0;
-  for (let i = 0; i < a.length; i++) {
-    dot += a[i] * b[i];
-    magA += a[i] * a[i];
-    magB += b[i] * b[i];
-  }
-  const mag = Math.sqrt(magA) * Math.sqrt(magB);
-  return mag === 0 ? 0 : dot / mag;
-}
+import { forceSimulation, forceLink, forceManyBody, forceX, forceY, forceCollide, type SimulationNodeDatum, type SimulationLinkDatum } from "d3-force";
+
 
 export function ReflectionDashboard() {
   const router = useRouter();
@@ -34,6 +25,7 @@ export function ReflectionDashboard() {
     { id: string; text: string; hierarchy: "main" | "sub"; parentId?: string; hitCount?: number }[]
   >([]);
   const [hasApiKey, setHasApiKey] = useState(true);
+  const [isNavigating, setIsNavigating] = useState(false);
   const [similarities, setSimilarities] = useState<
     { sourceId: string; targetId: string; score: number }[]
   >([]);
@@ -54,6 +46,7 @@ export function ReflectionDashboard() {
   const simulationRef = useRef<ReturnType<typeof forceSimulation<ForceNode>> | null>(null);
 
   // Stable key: only re-run simulation when keyword IDs or relations actually change
+  const maxHitCount = Math.max(1, ...mainKeywords.map(k => k.hitCount ?? 1));
   const mainKeywordIds = mainKeywords.map(k => k.id).join(",");
   const similarityKey = similarities.map(r => `${r.sourceId}-${r.targetId}`).join(",");
 
@@ -63,18 +56,12 @@ export function ReflectionDashboard() {
       return;
     }
 
-    const maxHitCount = Math.max(...mainKeywords.map(k => k.hitCount ?? 1));
-
-    // hit_count 가장 높은 노드를 중앙에 고정
-    const topId = mainKeywords.reduce((a, b) => ((a.hitCount ?? 1) >= (b.hitCount ?? 1) ? a : b)).id;
-
     const nodes: ForceNode[] = mainKeywords.map((kw, i) => ({
       id: kw.id,
       text: kw.text,
       hitCount: kw.hitCount ?? 1,
-      x: 250 + (Math.random() - 0.5) * 120,
-      y: 200 + (Math.random() - 0.5) * 100,
-      ...(kw.id === topId ? { fx: 250, fy: 200 } : {}),
+      x: 250,
+      y: 200,
     }));
 
     const links: SimulationLinkDatum<ForceNode>[] = similarities
@@ -88,28 +75,43 @@ export function ReflectionDashboard() {
 
     if (simulationRef.current) simulationRef.current.stop();
 
-    const sim = forceSimulation(nodes)
-      .force("link", forceLink<ForceNode, SimulationLinkDatum<ForceNode>>(links)
-        .id(d => d.id)
-        .distance((d: SimulationLinkDatum<ForceNode> & { distance?: number }) => d.distance ?? 120)
-        .strength((d: SimulationLinkDatum<ForceNode> & { strength?: number }) => d.strength ?? 0.5))
-      .force("charge", forceManyBody().strength(-10))
-      .force("center", forceCenter(250, 200))
-      .force("collide", forceCollide(35))
-      .on("tick", () => {
-        const positions = new Map<string, { x: number; y: number }>();
-        nodes.forEach(n => {
-          positions.set(n.id, {
-            x: Math.max(40, Math.min(460, n.x ?? 250)),
-            y: Math.max(40, Math.min(360, n.y ?? 200)),
+    const timerId = setTimeout(() => {
+      const sim = forceSimulation(nodes)
+        .alpha(0.4)
+        .force("link", forceLink<ForceNode, SimulationLinkDatum<ForceNode>>(links)
+          .id(d => d.id)
+          .distance((d: SimulationLinkDatum<ForceNode> & { distance?: number }) => d.distance ?? 120)
+          .strength((d: SimulationLinkDatum<ForceNode> & { strength?: number }) => d.strength ?? 0.5))
+        .force("charge", forceManyBody().strength(-10))
+        .force("x", forceX<ForceNode>(250).strength(d => {
+          const hc = d.hitCount;
+          // hit_count 최우선, 같으면 최신(index 큰 쪽)이 중앙
+          const isNewest = d.id === mainKeywords[mainKeywords.length - 1].id;
+          if (hc === maxHitCount && isNewest) return 0.5;
+          return 0.05 + (hc / maxHitCount) * 0.4;
+        }))
+        .force("y", forceY<ForceNode>(200).strength(d => {
+          const hc = d.hitCount;
+          const isNewest = d.id === mainKeywords[mainKeywords.length - 1].id;
+          if (hc === maxHitCount && isNewest) return 0.5;
+          return 0.05 + (hc / maxHitCount) * 0.4;
+        }))
+        .force("collide", forceCollide(35).strength(0.3))
+        .on("tick", () => {
+          const positions = new Map<string, { x: number; y: number }>();
+          nodes.forEach(n => {
+            positions.set(n.id, {
+              x: Math.max(40, Math.min(460, n.x ?? 250)),
+              y: Math.max(40, Math.min(360, n.y ?? 200)),
+            });
           });
+          setNodePositions(new Map(positions));
         });
-        setNodePositions(new Map(positions));
-      });
 
-    simulationRef.current = sim;
+      simulationRef.current = sim;
+    }, 100);
 
-    return () => { sim.stop(); };
+    return () => { clearTimeout(timerId); simulationRef.current?.stop(); };
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [mainKeywordIds, similarityKey]);
 
@@ -133,40 +135,50 @@ export function ReflectionDashboard() {
   }, []);
 
   // Load existing fragment keywords from DB
-  useEffect(() => {
-    const loadKeywords = async () => {
-      const { data: { user } } = await supabase.auth.getUser();
-      if (!user) return;
+  const loadKeywords = async () => {
+    const { data: { user } } = await supabase.auth.getUser();
+    if (!user) return;
 
-      const { data } = await supabase
-        .from("session_keywords")
-        .select("id, label, hierarchy, status, parent_id, hit_count, embedding")
-        .eq("user_id", user.id)
-        .in("status", ["fragment", "clustered", "core"]);
+    // This week: Monday 00:00 ~ Sunday 23:59
+    const now = new Date();
+    const day = now.getDay();
+    const monday = new Date(now);
+    monday.setDate(now.getDate() - (day === 0 ? 6 : day - 1));
+    monday.setHours(0, 0, 0, 0);
 
-      if (data && data.length > 0) {
-        setCanvasKeywords(data.map((kw) => ({
-          id: kw.id,
-          text: kw.label,
-          hierarchy: (kw.hierarchy ?? "sub") as "main" | "sub",
-          parentId: kw.parent_id ?? undefined,
-          hitCount: kw.hit_count ?? 1,
+    const { data } = await supabase
+      .from("session_keywords")
+      .select("id, label, hierarchy, status, parent_id, hit_count")
+      .eq("user_id", user.id)
+      .in("status", ["fragment", "clustered", "core"])
+      .gte("created_at", monday.toISOString());
+
+    if (data && data.length > 0) {
+      setCanvasKeywords(data.map((kw) => ({
+        id: kw.id,
+        text: kw.label,
+        hierarchy: (kw.hierarchy ?? "sub") as "main" | "sub",
+        parentId: kw.parent_id ?? undefined,
+        hitCount: kw.hit_count ?? 1,
+      })));
+
+      // Load relations from DB
+      const { data: rels } = await supabase
+        .from("keyword_relations")
+        .select("source_id, target_id, score")
+        .eq("user_id", user.id);
+
+      if (rels) {
+        setSimilarities(rels.map(r => ({
+          sourceId: r.source_id,
+          targetId: r.target_id,
+          score: r.score,
         })));
-
-        // Compute similarities between main keywords from embeddings
-        const mains = data.filter(k => k.hierarchy === "main" && k.embedding);
-        const sims: { sourceId: string; targetId: string; score: number }[] = [];
-        for (let i = 0; i < mains.length; i++) {
-          for (let j = i + 1; j < mains.length; j++) {
-            const score = cosineSimilarity(mains[i].embedding as number[], mains[j].embedding as number[]);
-            if (score > 0.3) {
-              sims.push({ sourceId: mains[i].id, targetId: mains[j].id, score });
-            }
-          }
-        }
-        setSimilarities(sims);
       }
-    };
+    }
+  };
+
+  useEffect(() => {
     loadKeywords();
   }, [supabase]);
 
@@ -199,72 +211,41 @@ export function ReflectionDashboard() {
         const data = await res.json();
 
         if (data.action === "merged") {
-          // Same topic — update hit_count in local state
-          setCanvasKeywords((prev) =>
-            prev.map((kw) =>
+          // Update hit_count + add new subs
+          const newSubs = (data.subs ?? []).map((sub: { id: string; label: string }) => ({
+            id: sub.id,
+            text: sub.label,
+            hierarchy: "sub" as const,
+            parentId: data.mergedInto,
+          }));
+          setCanvasKeywords((prev) => [
+            ...prev.map((kw) =>
               kw.id === data.mergedInto
                 ? { ...kw, hitCount: (kw.hitCount ?? 1) + 1 }
                 : kw
-            )
-          );
+            ),
+            ...newSubs,
+          ]);
         } else if (data.action === "created") {
-          const { data: { user } } = await supabase.auth.getUser();
-          if (!user) return;
+          const newKeywords: typeof canvasKeywords = [{
+            id: data.mainId,
+            text: data.main,
+            hierarchy: "main",
+            hitCount: 1,
+          }];
 
-          // Insert main keyword
-          const { data: mainInserted } = await supabase
-            .from("session_keywords")
-            .insert({
-              label: data.main, intensity: "high", hierarchy: "main",
-              status: "fragment", user_id: user.id, hit_count: 1,
-              embedding: data.embeddings?.[data.main] ?? null,
-            })
-            .select("id, label, hierarchy")
-            .single();
-
-          if (mainInserted) {
-            const newKeywords: typeof canvasKeywords = [{
-              id: mainInserted.id,
-              text: mainInserted.label,
-              hierarchy: "main",
-              hitCount: 1,
-            }];
-
-            // Insert sub keywords
-            if (data.subs?.length) {
-              const subsToInsert = data.subs.map((sub: string) => ({
-                label: sub, intensity: "medium", hierarchy: "sub", status: "fragment",
-                user_id: user.id, parent_id: mainInserted.id,
-                embedding: data.embeddings?.[sub] ?? null,
-              }));
-
-              const { data: subsInserted } = await supabase
-                .from("session_keywords")
-                .insert(subsToInsert)
-                .select("id, label, hierarchy");
-
-              if (subsInserted) {
-                newKeywords.push(...subsInserted.map((kw) => ({
-                  id: kw.id,
-                  text: kw.label,
-                  hierarchy: "sub" as const,
-                  parentId: mainInserted.id,
-                })));
-              }
-            }
-
-            // Update similarities from API response
-            if (data.similarities?.length) {
-              const newSims = data.similarities.map((s: { id: string; score: number }) => ({
-                sourceId: s.id,
-                targetId: mainInserted.id,
-                score: s.score,
-              }));
-              setSimilarities((prev) => [...prev, ...newSims]);
-            }
-
-            setCanvasKeywords((prev) => [...prev, ...newKeywords]);
+          if (data.subs?.length) {
+            newKeywords.push(...data.subs.map((sub: { id: string; label: string }) => ({
+              id: sub.id,
+              text: sub.label,
+              hierarchy: "sub" as const,
+              parentId: data.mainId,
+            })));
           }
+
+          setCanvasKeywords((prev) => [...prev, ...newKeywords]);
+          // Relations are already in DB, reload to get them
+          loadKeywords();
         }
       }
     } catch {
@@ -275,16 +256,17 @@ export function ReflectionDashboard() {
   };
 
   const handleKeywordClick = async (keywordText: string) => {
-    // If there's an active session, go to it instead of creating new
     if (hasActiveSession && activeSession) {
+      setIsNavigating(true);
       router.push(`/chat/${activeSession.id}`);
       return;
     }
 
+    setIsNavigating(true);
     const {
       data: { user },
     } = await supabase.auth.getUser();
-    if (!user) return;
+    if (!user) { setIsNavigating(false); return; }
 
     const { data } = await supabase
       .from("chat_sessions")
@@ -310,17 +292,8 @@ export function ReflectionDashboard() {
   const activeSession = chatHistory.sessions.find(s => s.status === "active");
   const hasActiveSession = !!activeSession;
 
-  if (dashboard.isLoading) {
-    return (
-      <div className="flex h-screen w-full items-center justify-center bg-[#edf0f5] dark:bg-[#1a1d1d]">
-        <div className="flex flex-col items-center gap-3">
-          <div className="glass-solid flex h-12 w-12 items-center justify-center !rounded-2xl animate-pulse">
-            <Sparkles className="h-6 w-6 text-white" />
-          </div>
-          <p className="text-sm text-slate-400">Loading your reflections...</p>
-        </div>
-      </div>
-    );
+  if (dashboard.isLoading || isNavigating) {
+    return <LoadingScreen />;
   }
 
   return (
@@ -417,9 +390,23 @@ export function ReflectionDashboard() {
               </div>
             )}
 
+            {/* Legend */}
+            {similarities.length > 0 && !expandedMain && (
+              <p className="absolute top-4 right-4 text-[10px] text-slate-400 z-20">
+                Thicker lines = stronger connection
+              </p>
+            )}
+
             {/* Relation Lines */}
-            <svg className="absolute inset-0 w-full h-full pointer-events-none z-[5]">
-              {similarities.map((sim, i) => {
+            <svg
+              className="absolute inset-0 w-full h-full pointer-events-none z-[5]"
+              style={{
+                opacity: expandedMain ? 0.15 : 1,
+                filter: expandedMain ? "blur(3px)" : "none",
+                transition: "opacity 0.4s, filter 0.4s",
+              }}
+            >
+              {similarities.filter(s => s.score >= 0.65).map((sim, i) => {
                 const sourcePos = nodePositions.get(sim.sourceId);
                 const targetPos = nodePositions.get(sim.targetId);
                 if (!sourcePos || !targetPos) return null;

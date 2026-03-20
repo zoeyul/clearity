@@ -4,7 +4,7 @@ import { z } from "zod"
 import { createServerSupabaseClient } from "@clearity/lib/supabase/server"
 import { cosineSimilarity } from "@clearity/lib/utils/cosine"
 
-const SIMILARITY_THRESHOLD = 0.85
+const SIMILARITY_THRESHOLD = 0.8
 
 const ExtractionSchema = z.object({
   main: z.string().describe("The primary topic or core concern (2-4 words)"),
@@ -48,12 +48,12 @@ Rules:
 User message: "${message}"`,
     })
 
-    // 2. Generate embedding for main keyword
+    // 2. Generate embedding from original message (not keyword) for better discrimination
     let mainEmbedding: number[] | null = null
     try {
       const { embedding } = await embed({
         model: google.textEmbeddingModel("gemini-embedding-001"),
-        value: object.main,
+        value: message,
       })
       mainEmbedding = embedding
     } catch {
@@ -62,7 +62,7 @@ User message: "${message}"`,
 
     // 3. Dedup: compare with existing main keywords
     let matchedKeywordId: string | null = null
-    let similarities: { id: string; score: number }[] = []
+    const similarities: { id: string; score: number }[] = []
 
     if (mainEmbedding) {
       const { data: existingKeywords } = await supabase
@@ -85,43 +85,117 @@ User message: "${message}"`,
       }
     }
 
-    // 4. Dedup result
+    // 4. Dedup: same topic → increment hit_count + append new subs
     if (matchedKeywordId) {
-      // Same topic — atomic increment hit_count + refresh updated_at
       await supabase.rpc("increment_hit_count", { keyword_id: matchedKeywordId })
+
+      // Add new sub keywords under existing main
+      const newSubs: { id: string; label: string }[] = []
+      if (object.subs.length > 0) {
+        const subsToInsert = object.subs.map(sub => ({
+          label: sub,
+          intensity: "medium",
+          hierarchy: "sub",
+          status: "fragment",
+          user_id: user.id,
+          parent_id: matchedKeywordId,
+        }))
+
+        const { data } = await supabase
+          .from("session_keywords")
+          .insert(subsToInsert)
+          .select("id, label")
+
+        if (data) newSubs.push(...data)
+      }
+
+      // Save raw input log
+      await supabase.from("user_inputs").insert({
+        user_id: user.id,
+        message,
+        embedding: mainEmbedding,
+        extracted_main: object.main,
+        extracted_subs: object.subs,
+        matched_keyword_id: matchedKeywordId,
+      })
 
       return Response.json({
         action: "merged",
         mergedInto: matchedKeywordId,
         sessionTitle: object.sessionTitle,
-        subs: object.subs,
-        similarities: similarities.filter(s => s.score > 0.3),
+        subs: newSubs,
       })
     }
 
-    // 5. New topic — generate sub embeddings too
-    const embeddings: Record<string, number[]> = {}
-    if (mainEmbedding) embeddings[object.main] = mainEmbedding
+    // 5. New topic — insert main keyword
+    const { data: mainInserted } = await supabase
+      .from("session_keywords")
+      .insert({
+        label: object.main,
+        intensity: "high",
+        hierarchy: "main",
+        status: "fragment",
+        user_id: user.id,
+        hit_count: 1,
+        embedding: mainEmbedding,
+      })
+      .select("id")
+      .single()
 
-    for (const sub of object.subs) {
-      try {
-        const { embedding } = await embed({
-          model: google.textEmbeddingModel("gemini-embedding-001"),
-          value: sub,
-        })
-        embeddings[sub] = embedding
-      } catch {
-        // continue
-      }
+    if (!mainInserted) {
+      return Response.json({ error: "Failed to insert keyword" }, { status: 500 })
+    }
+
+    // 6. Insert sub keywords
+    const subsInserted: { id: string; label: string }[] = []
+    if (object.subs.length > 0) {
+      const subsToInsert = object.subs.map(sub => ({
+        label: sub,
+        intensity: "medium",
+        hierarchy: "sub",
+        status: "fragment",
+        user_id: user.id,
+        parent_id: mainInserted.id,
+      }))
+
+      const { data } = await supabase
+        .from("session_keywords")
+        .insert(subsToInsert)
+        .select("id, label")
+
+      if (data) subsInserted.push(...data)
+    }
+
+    // 7. Save raw input log
+    await supabase.from("user_inputs").insert({
+      user_id: user.id,
+      message,
+      embedding: mainEmbedding,
+      extracted_main: object.main,
+      extracted_subs: object.subs,
+      matched_keyword_id: null,
+    })
+
+    // 8. Save similarity scores to keyword_relations
+    const relationsToInsert = similarities
+      .filter(s => s.score > 0)
+      .map(s => ({
+        source_id: s.id,
+        target_id: mainInserted.id,
+        score: s.score,
+        user_id: user.id,
+      }))
+
+    if (relationsToInsert.length > 0) {
+      await supabase.from("keyword_relations").insert(relationsToInsert)
     }
 
     return Response.json({
       action: "created",
+      mainId: mainInserted.id,
       main: object.main,
-      subs: object.subs,
+      subs: subsInserted,
       sessionTitle: object.sessionTitle,
-      embeddings,
-      similarities: similarities.filter(s => s.score > 0.3),
     })
   } catch (error: unknown) {
     const err = error as { statusCode?: number; message?: string }
