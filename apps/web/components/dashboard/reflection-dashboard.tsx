@@ -10,8 +10,16 @@ import { createClient } from "@clearity/lib";
 import { useDashboard } from "@/hooks/use-dashboard";
 import { useChatHistory } from "@/hooks/use-chat-history";
 import { LeftSidebar } from "@/components/dashboard/left-sidebar";
-import { forceSimulation, forceLink, forceManyBody, forceX, forceY, forceCollide, type SimulationNodeDatum, type SimulationLinkDatum } from "d3-force";
-
+import {
+  forceSimulation,
+  forceLink,
+  forceManyBody,
+  forceX,
+  forceY,
+  forceCollide,
+  type SimulationNodeDatum,
+  type SimulationLinkDatum,
+} from "d3-force";
 
 export function ReflectionDashboard() {
   const router = useRouter();
@@ -22,16 +30,24 @@ export function ReflectionDashboard() {
   const [isExtracting, setIsExtracting] = useState(false);
   const [expandedMain, setExpandedMain] = useState<string | null>(null);
   const [canvasKeywords, setCanvasKeywords] = useState<
-    { id: string; text: string; hierarchy: "main" | "sub"; parentId?: string; hitCount?: number }[]
+    {
+      id: string;
+      text: string;
+      hierarchy: "main" | "sub";
+      parentId?: string;
+      hitCount?: number;
+      createdAt?: string;
+    }[]
   >([]);
   const [hasApiKey, setHasApiKey] = useState(true);
   const [isNavigating, setIsNavigating] = useState(false);
+  const [glowingIds, setGlowingIds] = useState<Set<string>>(new Set());
   const [similarities, setSimilarities] = useState<
     { sourceId: string; targetId: string; score: number }[]
   >([]);
 
   const mainKeywords = useMemo(
-    () => canvasKeywords.filter(k => k.hierarchy === "main"),
+    () => canvasKeywords.filter((k) => k.hierarchy === "main"),
     [canvasKeywords],
   );
 
@@ -42,13 +58,19 @@ export function ReflectionDashboard() {
     hitCount: number;
   }
 
-  const [nodePositions, setNodePositions] = useState<Map<string, { x: number; y: number }>>(new Map());
-  const simulationRef = useRef<ReturnType<typeof forceSimulation<ForceNode>> | null>(null);
+  const [nodePositions, setNodePositions] = useState<
+    Map<string, { x: number; y: number }>
+  >(new Map());
+  const simulationRef = useRef<ReturnType<
+    typeof forceSimulation<ForceNode>
+  > | null>(null);
 
   // Stable key: only re-run simulation when keyword IDs or relations actually change
-  const maxHitCount = Math.max(1, ...mainKeywords.map(k => k.hitCount ?? 1));
-  const mainKeywordIds = mainKeywords.map(k => k.id).join(",");
-  const similarityKey = similarities.map(r => `${r.sourceId}-${r.targetId}`).join(",");
+  const maxHitCount = Math.max(1, ...mainKeywords.map((k) => k.hitCount ?? 1));
+  const mainKeywordIds = mainKeywords.map((k) => k.id).join(",");
+  const similarityKey = similarities
+    .map((r) => `${r.sourceId}-${r.targetId}`)
+    .join(",");
 
   useEffect(() => {
     if (mainKeywords.length === 0) {
@@ -65,8 +87,12 @@ export function ReflectionDashboard() {
     }));
 
     const links: SimulationLinkDatum<ForceNode>[] = similarities
-      .filter(r => nodes.some(n => n.id === r.sourceId) && nodes.some(n => n.id === r.targetId))
-      .map(r => ({
+      .filter(
+        (r) =>
+          nodes.some((n) => n.id === r.sourceId) &&
+          nodes.some((n) => n.id === r.targetId),
+      )
+      .map((r) => ({
         source: r.sourceId,
         target: r.targetId,
         strength: r.score * 1.5,
@@ -78,28 +104,43 @@ export function ReflectionDashboard() {
     const timerId = setTimeout(() => {
       const sim = forceSimulation(nodes)
         .alpha(0.4)
-        .force("link", forceLink<ForceNode, SimulationLinkDatum<ForceNode>>(links)
-          .id(d => d.id)
-          .distance((d: SimulationLinkDatum<ForceNode> & { distance?: number }) => d.distance ?? 120)
-          .strength((d: SimulationLinkDatum<ForceNode> & { strength?: number }) => d.strength ?? 0.5))
+        .force(
+          "link",
+          forceLink<ForceNode, SimulationLinkDatum<ForceNode>>(links)
+            .id((d) => d.id)
+            .distance(
+              (d: SimulationLinkDatum<ForceNode> & { distance?: number }) =>
+                d.distance ?? 120,
+            )
+            .strength(
+              (d: SimulationLinkDatum<ForceNode> & { strength?: number }) =>
+                d.strength ?? 0.5,
+            ),
+        )
         .force("charge", forceManyBody().strength(-10))
-        .force("x", forceX<ForceNode>(250).strength(d => {
-          const hc = d.hitCount;
-          // hit_count 최우선, 같으면 최신(index 큰 쪽)이 중앙
-          const isNewest = d.id === mainKeywords[mainKeywords.length - 1].id;
-          if (hc === maxHitCount && isNewest) return 0.5;
-          return 0.05 + (hc / maxHitCount) * 0.4;
-        }))
-        .force("y", forceY<ForceNode>(200).strength(d => {
-          const hc = d.hitCount;
-          const isNewest = d.id === mainKeywords[mainKeywords.length - 1].id;
-          if (hc === maxHitCount && isNewest) return 0.5;
-          return 0.05 + (hc / maxHitCount) * 0.4;
-        }))
+        .force(
+          "x",
+          forceX<ForceNode>(250).strength((d) => {
+            const hc = d.hitCount;
+            // hit_count 최우선, 같으면 최신(index 큰 쪽)이 중앙
+            const isNewest = d.id === mainKeywords[mainKeywords.length - 1].id;
+            if (hc === maxHitCount && isNewest) return 0.5;
+            return 0.05 + (hc / maxHitCount) * 0.4;
+          }),
+        )
+        .force(
+          "y",
+          forceY<ForceNode>(200).strength((d) => {
+            const hc = d.hitCount;
+            const isNewest = d.id === mainKeywords[mainKeywords.length - 1].id;
+            if (hc === maxHitCount && isNewest) return 0.5;
+            return 0.05 + (hc / maxHitCount) * 0.4;
+          }),
+        )
         .force("collide", forceCollide(35).strength(0.3))
         .on("tick", () => {
           const positions = new Map<string, { x: number; y: number }>();
-          nodes.forEach(n => {
+          nodes.forEach((n) => {
             positions.set(n.id, {
               x: Math.max(40, Math.min(460, n.x ?? 250)),
               y: Math.max(40, Math.min(360, n.y ?? 200)),
@@ -111,8 +152,11 @@ export function ReflectionDashboard() {
       simulationRef.current = sim;
     }, 100);
 
-    return () => { clearTimeout(timerId); simulationRef.current?.stop(); };
-  // eslint-disable-next-line react-hooks/exhaustive-deps
+    return () => {
+      clearTimeout(timerId);
+      simulationRef.current?.stop();
+    };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [mainKeywordIds, similarityKey]);
 
   // Fixed particle positions
@@ -128,15 +172,26 @@ export function ReflectionDashboard() {
     [],
   );
 
-  // Check for API key
+  // Check for API key — also listen for changes
   useEffect(() => {
-    const key = typeof window !== "undefined" ? localStorage.getItem("clearity-api-key") : null;
-    setHasApiKey(!!key);
+    const check = () => {
+      const key = localStorage.getItem("clearity-api-key");
+      setHasApiKey(!!key);
+    };
+    check();
+    window.addEventListener("storage", check);
+    window.addEventListener("focus", check);
+    return () => {
+      window.removeEventListener("storage", check);
+      window.removeEventListener("focus", check);
+    };
   }, []);
 
   // Load existing fragment keywords from DB
   const loadKeywords = async () => {
-    const { data: { user } } = await supabase.auth.getUser();
+    const {
+      data: { user },
+    } = await supabase.auth.getUser();
     if (!user) return;
 
     // This week: Monday 00:00 ~ Sunday 23:59
@@ -148,19 +203,22 @@ export function ReflectionDashboard() {
 
     const { data } = await supabase
       .from("session_keywords")
-      .select("id, label, hierarchy, status, parent_id, hit_count")
+      .select("id, label, hierarchy, status, parent_id, hit_count, created_at")
       .eq("user_id", user.id)
       .in("status", ["fragment", "clustered", "core"])
       .gte("created_at", monday.toISOString());
 
     if (data && data.length > 0) {
-      setCanvasKeywords(data.map((kw) => ({
-        id: kw.id,
-        text: kw.label,
-        hierarchy: (kw.hierarchy ?? "sub") as "main" | "sub",
-        parentId: kw.parent_id ?? undefined,
-        hitCount: kw.hit_count ?? 1,
-      })));
+      setCanvasKeywords(
+        data.map((kw) => ({
+          id: kw.id,
+          text: kw.label,
+          hierarchy: (kw.hierarchy ?? "sub") as "main" | "sub",
+          parentId: kw.parent_id ?? undefined,
+          hitCount: kw.hit_count ?? 1,
+          createdAt: kw.created_at,
+        })),
+      );
 
       // Load relations from DB
       const { data: rels } = await supabase
@@ -169,11 +227,13 @@ export function ReflectionDashboard() {
         .eq("user_id", user.id);
 
       if (rels) {
-        setSimilarities(rels.map(r => ({
-          sourceId: r.source_id,
-          targetId: r.target_id,
-          score: r.score,
-        })));
+        setSimilarities(
+          rels.map((r) => ({
+            sourceId: r.source_id,
+            targetId: r.target_id,
+            score: r.score,
+          })),
+        );
       }
     }
   };
@@ -186,7 +246,10 @@ export function ReflectionDashboard() {
   const handleExtract = async () => {
     if (!inputValue.trim() || isExtracting) return;
 
-    const apiKey = typeof window !== "undefined" ? localStorage.getItem("clearity-api-key") : null;
+    const apiKey =
+      typeof window !== "undefined"
+        ? localStorage.getItem("clearity-api-key")
+        : null;
     if (!apiKey) {
       router.push("/settings");
       return;
@@ -212,38 +275,49 @@ export function ReflectionDashboard() {
 
         if (data.action === "merged") {
           // Update hit_count + add new subs
-          const newSubs = (data.subs ?? []).map((sub: { id: string; label: string }) => ({
-            id: sub.id,
-            text: sub.label,
-            hierarchy: "sub" as const,
-            parentId: data.mergedInto,
-          }));
+          const newSubs = (data.subs ?? []).map(
+            (sub: { id: string; label: string }) => ({
+              id: sub.id,
+              text: sub.label,
+              hierarchy: "sub" as const,
+              parentId: data.mergedInto,
+            }),
+          );
           setCanvasKeywords((prev) => [
             ...prev.map((kw) =>
               kw.id === data.mergedInto
                 ? { ...kw, hitCount: (kw.hitCount ?? 1) + 1 }
-                : kw
+                : kw,
             ),
             ...newSubs,
           ]);
+          setGlowingIds(new Set([data.mergedInto]));
+          setTimeout(() => setGlowingIds(new Set()), 5000);
         } else if (data.action === "created") {
-          const newKeywords: typeof canvasKeywords = [{
-            id: data.mainId,
-            text: data.main,
-            hierarchy: "main",
-            hitCount: 1,
-          }];
+          const newKeywords: typeof canvasKeywords = [
+            {
+              id: data.mainId,
+              text: data.main,
+              hierarchy: "main",
+              hitCount: 1,
+            },
+          ];
 
           if (data.subs?.length) {
-            newKeywords.push(...data.subs.map((sub: { id: string; label: string }) => ({
-              id: sub.id,
-              text: sub.label,
-              hierarchy: "sub" as const,
-              parentId: data.mainId,
-            })));
+            newKeywords.push(
+              ...data.subs.map((sub: { id: string; label: string }) => ({
+                id: sub.id,
+                text: sub.label,
+                hierarchy: "sub" as const,
+                parentId: data.mainId,
+              })),
+            );
           }
 
           setCanvasKeywords((prev) => [...prev, ...newKeywords]);
+          // Glow new main keyword for 5 seconds
+          setGlowingIds(new Set([data.mainId]));
+          setTimeout(() => setGlowingIds(new Set()), 5000);
           // Relations are already in DB, reload to get them
           loadKeywords();
         }
@@ -266,13 +340,17 @@ export function ReflectionDashboard() {
     const {
       data: { user },
     } = await supabase.auth.getUser();
-    if (!user) { setIsNavigating(false); return; }
+    if (!user) {
+      setIsNavigating(false);
+      return;
+    }
 
-    const { data } = await supabase
+    const { data, error } = await supabase
       .from("chat_sessions")
       .insert({ title: keywordText, user_id: user.id })
       .select()
       .single();
+    console.log("[handleKeywordClick]", { data, error });
     if (data)
       router.push(
         `/chat/${data.id}?keyword=${encodeURIComponent(keywordText)}`,
@@ -289,7 +367,7 @@ export function ReflectionDashboard() {
   }));
 
   // Check for active session
-  const activeSession = chatHistory.sessions.find(s => s.status === "active");
+  const activeSession = chatHistory.sessions.find((s) => s.status === "active");
   const hasActiveSession = !!activeSession;
 
   if (dashboard.isLoading || isNavigating) {
@@ -346,7 +424,10 @@ export function ReflectionDashboard() {
           </div>
 
           {/* Thought Canvas */}
-          <div className="flex-1 glass !rounded-3xl p-6 relative overflow-hidden" style={{ perspective: "600px", perspectiveOrigin: "50% 45%" }}>
+          <div
+            className="flex-1 glass !rounded-3xl p-6 relative overflow-hidden"
+            style={{ perspective: "600px", perspectiveOrigin: "50% 45%" }}
+          >
             {/* Ambient Particles — visible when canvas is empty */}
             {canvasKeywords.length === 0 && (
               <div className="absolute inset-0 flex items-center justify-center">
@@ -382,10 +463,12 @@ export function ReflectionDashboard() {
                     "absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 text-xs tracking-wide transition-all",
                     isExtracting
                       ? "text-zinc-500 animate-bounce"
-                      : "text-zinc-400/60"
+                      : "text-zinc-400/60",
                   )}
                 >
-                  {isExtracting ? "Extracting your thoughts..." : "Your thoughts will appear here"}
+                  {isExtracting
+                    ? "Extracting your thoughts..."
+                    : "Your thoughts will appear here"}
                 </p>
               </div>
             )}
@@ -406,41 +489,47 @@ export function ReflectionDashboard() {
                 transition: "opacity 0.4s, filter 0.4s",
               }}
             >
-              {similarities.filter(s => s.score >= 0.65).map((sim, i) => {
-                const sourcePos = nodePositions.get(sim.sourceId);
-                const targetPos = nodePositions.get(sim.targetId);
-                if (!sourcePos || !targetPos) return null;
+              {similarities
+                .filter((s) => s.score >= 0.65)
+                .map((sim, i) => {
+                  const sourcePos = nodePositions.get(sim.sourceId);
+                  const targetPos = nodePositions.get(sim.targetId);
+                  if (!sourcePos || !targetPos) return null;
 
-                const sx = (sourcePos.x / 500) * 100;
-                const sy = (sourcePos.y / 400) * 100;
-                const tx = (targetPos.x / 500) * 100;
-                const ty = (targetPos.y / 400) * 100;
+                  const sx = (sourcePos.x / 500) * 100;
+                  const sy = (sourcePos.y / 400) * 100;
+                  const tx = (targetPos.x / 500) * 100;
+                  const ty = (targetPos.y / 400) * 100;
 
-                return (
-                  <line
-                    key={`sim-${i}`}
-                    x1={`${sx}%`} y1={`${sy}%`}
-                    x2={`${tx}%`} y2={`${ty}%`}
-                    stroke={`rgba(148, 163, 184, ${sim.score * 0.6})`}
-                    strokeWidth={1 + sim.score * 1.5}
-                    strokeLinecap="round"
-                  />
-                );
-              })}
+                  return (
+                    <line
+                      key={`sim-${i}`}
+                      x1={`${sx}%`}
+                      y1={`${sy}%`}
+                      x2={`${tx}%`}
+                      y2={`${ty}%`}
+                      stroke={`rgba(148, 163, 184, ${Math.max(0.2, (sim.score - 0.65) / 0.35)})`}
+                      strokeWidth={1 + (sim.score - 0.65) * 15}
+                      strokeLinecap="round"
+                    />
+                  );
+                })}
             </svg>
 
             {/* Keyword Constellation */}
             <div className="absolute inset-0 pointer-events-none z-10">
-
               {/* Main keywords — pill stays in place, note slides out */}
               {mainKeywords.map((kw, i) => {
+                const isGlowing = glowingIds.has(kw.id);
                 const pos = nodePositions.get(kw.id);
                 if (!pos) return null;
                 const x = (pos.x / 500) * 100;
                 const y = (pos.y / 400) * 100;
                 const isExpanded = expandedMain === kw.text;
                 const isFaded = expandedMain !== null && !isExpanded;
-                const subs = canvasKeywords.filter(k => k.hierarchy === "sub" && k.parentId === kw.id);
+                const subs = canvasKeywords.filter(
+                  (k) => k.hierarchy === "sub" && k.parentId === kw.id,
+                );
                 const noteOnRight = x <= 50;
 
                 return (
@@ -459,8 +548,11 @@ export function ReflectionDashboard() {
                     }}
                   >
                     <div
-                      className="text-sm font-semibold text-slate-700 dark:text-slate-200 cursor-pointer hover:scale-105 transition-all whitespace-nowrap"
-                      onClick={() => setExpandedMain(isExpanded ? null : kw.text)}
+                      className="font-semibold text-slate-700 dark:text-slate-200 cursor-pointer hover:scale-105 transition-all whitespace-nowrap"
+                      style={{ fontSize: isGlowing ? "15px" : "14px", animation: isGlowing ? "pulse-glow 3s ease-in-out infinite" : undefined }}
+                      onClick={() =>
+                        setExpandedMain(isExpanded ? null : kw.text)
+                      }
                     >
                       {kw.text}
                     </div>
@@ -474,7 +566,11 @@ export function ReflectionDashboard() {
                           transform: "translateY(-50%)",
                           ...(noteOnRight
                             ? { left: "100%", paddingLeft: "8px" }
-                            : { right: "100%", paddingRight: "8px", flexDirection: "row-reverse" as const }),
+                            : {
+                                right: "100%",
+                                paddingRight: "8px",
+                                flexDirection: "row-reverse" as const,
+                              }),
                           zIndex: 25,
                         }}
                       >
@@ -501,7 +597,10 @@ export function ReflectionDashboard() {
                               <span
                                 key={sub.id}
                                 className="text-[11px] text-slate-700 dark:text-slate-400"
-                                style={{ opacity: 0, animation: `fadeIn 0.3s ${0.5 + si * 0.1}s forwards` }}
+                                style={{
+                                  opacity: 0,
+                                  animation: `fadeIn 0.3s ${0.5 + si * 0.1}s forwards`,
+                                }}
                               >
                                 #{sub.text}
                               </span>
@@ -514,7 +613,10 @@ export function ReflectionDashboard() {
                                 handleKeywordClick(kw.text);
                               }}
                               className="text-[10px] text-slate-400 hover:text-slate-700 dark:hover:text-slate-200 transition-colors cursor-pointer"
-                              style={{ opacity: 0, animation: `fadeIn 0.3s ${0.5 + subs.length * 0.1 + 0.1}s forwards` }}
+                              style={{
+                                opacity: 0,
+                                animation: `fadeIn 0.3s ${0.5 + subs.length * 0.1 + 0.1}s forwards`,
+                              }}
                             >
                               Deep Dive →
                             </button>
@@ -543,10 +645,16 @@ export function ReflectionDashboard() {
                       setInputValue(e.target.value);
                       // Auto-resize
                       e.target.style.height = "auto";
-                      e.target.style.height = Math.min(e.target.scrollHeight, 160) + "px";
+                      e.target.style.height =
+                        Math.min(e.target.scrollHeight, 160) + "px";
                     }}
                     onKeyDown={(e) => {
-                      if (e.key === "Enter" && !e.shiftKey && !e.nativeEvent.isComposing && inputValue.trim()) {
+                      if (
+                        e.key === "Enter" &&
+                        !e.shiftKey &&
+                        !e.nativeEvent.isComposing &&
+                        inputValue.trim()
+                      ) {
                         e.preventDefault();
                         handleExtract();
                       }
@@ -563,7 +671,10 @@ export function ReflectionDashboard() {
                     disabled={isExtracting || !inputValue.trim()}
                     className="absolute right-2 bottom-2 h-8 w-8 rounded-xl text-slate-500 hover:text-indigo-600 hover:bg-indigo-50 disabled:opacity-50 disabled:cursor-not-allowed"
                   >
-                    <Zap className="h-4 w-4" fill={inputValue.trim() ? "currentColor" : "none"} />
+                    <Zap
+                      className="h-4 w-4"
+                      fill={inputValue.trim() ? "currentColor" : "none"}
+                    />
                   </Button>
                 </div>
                 {!hasApiKey ? (

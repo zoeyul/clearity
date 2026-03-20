@@ -1,11 +1,11 @@
 "use client"
 
-import { useState, useRef, useEffect } from "react"
+import { useState, useRef, useEffect, useCallback } from "react"
 import { useChat } from "@ai-sdk/react"
 import { TextStreamChatTransport } from "ai"
 import { motion } from "framer-motion"
 import { Button } from "@clearity/ui"
-import { Input } from "@clearity/ui"
+import { createClient } from "@clearity/lib"
 import {
   Sheet,
   SheetContent,
@@ -27,23 +27,47 @@ interface ChatAreaProps {
   keyword?: string
 }
 
-export function ChatArea({
+export function ChatArea(props: ChatAreaProps) {
+  const [apiKey, setApiKey] = useState<string | null>(null)
+  const [aboutMe, setAboutMe] = useState<string | null>(null)
+  const [isReady, setIsReady] = useState(false)
+
+  useEffect(() => {
+    setApiKey(localStorage.getItem("clearity-api-key"))
+    setAboutMe(localStorage.getItem("clearity-about-me"))
+    setIsReady(true)
+  }, [])
+
+  if (!isReady) {
+    return (
+      <div className="flex flex-1 items-center justify-center">
+        <p className="text-sm text-zinc-400">Loading...</p>
+      </div>
+    )
+  }
+
+  return <ChatAreaInner {...props} apiKey={apiKey} aboutMe={aboutMe} />
+}
+
+function ChatAreaInner({
   sessionId,
   sessionStatus,
   onFinishSession,
   isLoading,
   keyword,
-}: ChatAreaProps) {
+  apiKey,
+  aboutMe,
+}: ChatAreaProps & { apiKey: string | null; aboutMe: string | null }) {
   const [inputValue, setInputValue] = useState("")
   const [headerKeyword, setHeaderKeyword] = useState<string | null>(keyword ?? null)
   const [subKeywords, setSubKeywords] = useState<string[]>([])
+  const [dbMessages, setDbMessages] = useState<{ id: string; role: "user" | "assistant"; content: string }[]>([])
   const scrollRef = useRef<HTMLDivElement>(null)
-
-  const apiKey = typeof window !== "undefined" ? localStorage.getItem("clearity-api-key") : null
-  const aboutMe = typeof window !== "undefined" ? localStorage.getItem("clearity-about-me") : null
+  const supabase = createClient()
+  const savedCountRef = useRef(0)
   const noApiKey = !apiKey
 
-  const { messages, sendMessage, status } = useChat({
+  const { messages: liveMessages, sendMessage, status } = useChat({
     id: sessionId,
     transport: new TextStreamChatTransport({
       api: "/api/chat",
@@ -51,7 +75,56 @@ export function ChatArea({
     }),
   })
 
+  // Load existing messages from DB
+  useEffect(() => {
+    const loadMessages = async () => {
+      const { data } = await supabase
+        .from("messages")
+        .select("id, role, content")
+        .eq("session_id", sessionId)
+        .order("created_at", { ascending: true })
+      if (data && data.length > 0) {
+        setDbMessages(data.map(m => ({
+          id: m.id,
+          role: m.role as "user" | "assistant",
+          content: m.content,
+        })))
+        savedCountRef.current = data.length
+      }
+    }
+    loadMessages()
+  }, [sessionId, supabase])
+
+  // Combined messages for rendering
+  const messages = [
+    ...dbMessages.map(m => ({
+      id: m.id,
+      role: m.role,
+      parts: [{ type: "text" as const, text: m.content }],
+    })),
+    ...liveMessages,
+  ]
+
   const isStreaming = status === "streaming" || status === "submitted"
+
+  // Save new messages to DB when streaming completes
+  useEffect(() => {
+    if (status !== "ready" || liveMessages.length === 0) return
+    const unsaved = liveMessages.slice(savedCountRef.current - dbMessages.length)
+    if (unsaved.length === 0) return
+
+    const saveMessages = async () => {
+      const toInsert = unsaved.map(m => ({
+        session_id: sessionId,
+        role: m.role,
+        content: m.parts?.filter(p => p.type === "text").map(p => (p as { type: "text"; text: string }).text).join("") ?? "",
+      }))
+      const { error } = await supabase.from("messages").insert(toInsert)
+      console.log("[saveMessages]", { toInsert, error })
+      savedCountRef.current = dbMessages.length + liveMessages.length
+    }
+    saveMessages()
+  }, [status, liveMessages.length, sessionId, supabase, dbMessages.length])
 
   // Auto-scroll
   useEffect(() => {
@@ -64,11 +137,26 @@ export function ChatArea({
     if (!inputValue.trim() || isStreaming || sessionStatus === "completed" || noApiKey) return
 
     const messageText = inputValue
+    const isFirstMessage = messages.length === 0
+
+    // Save greeting + first user message to DB
+    if (isFirstMessage) {
+      const greeting = keyword
+        ? `I see you're focusing on '${keyword}'. Want to dig deeper, or is there something specific about it that's been stuck?`
+        : "What's been on your mind lately? No need to organize it — just start wherever feels right."
+      const { error } = await supabase.from("messages").insert([
+        { session_id: sessionId, role: "assistant", content: greeting },
+        { session_id: sessionId, role: "user", content: messageText },
+      ])
+      console.log("[firstMessage]", { error })
+      savedCountRef.current = 2
+    }
+
     sendMessage({ text: messageText })
     setInputValue("")
 
     // Extract keywords from first message via Gemini
-    if (!headerKeyword && messages.length === 0) {
+    if (!headerKeyword && isFirstMessage) {
       try {
         const res = await fetch("/api/extract-keywords", {
           method: "POST",
@@ -261,15 +349,25 @@ export function ChatArea({
       {/* Input */}
       <div className="relative z-10 border-t border-white/15 px-4 py-4 lg:px-6">
         <div className="flex flex-col gap-3">
-          <div className="flex items-center gap-3">
+          <div className="flex items-end gap-3">
             <div className="glass-subtle relative flex-1 !rounded-2xl overflow-hidden">
-              <Input
+              <textarea
                 value={inputValue}
-                onChange={(e) => setInputValue(e.target.value)}
-                onKeyDown={(e) => e.key === "Enter" && !e.shiftKey && handleSend()}
+                onChange={(e) => {
+                  setInputValue(e.target.value)
+                  e.target.style.height = "auto"
+                  e.target.style.height = Math.min(e.target.scrollHeight, 500) + "px"
+                }}
+                onKeyDown={(e) => {
+                  if (e.key === "Enter" && !e.shiftKey && !e.nativeEvent.isComposing && inputValue.trim()) {
+                    e.preventDefault()
+                    handleSend()
+                  }
+                }}
                 placeholder={sessionStatus === "completed" ? "Session ended" : noApiKey ? "Add API key in Settings first" : "Share what's on your mind..."}
                 disabled={sessionStatus === "completed" || noApiKey}
-                className="h-12 bg-transparent border-0 focus-visible:ring-0 focus-visible:ring-offset-0 text-zinc-800 dark:text-zinc-200 placeholder:text-zinc-400"
+                rows={1}
+                className="w-full min-h-[48px] max-h-[500px] px-4 py-3 bg-transparent text-sm text-zinc-800 dark:text-zinc-200 placeholder:text-zinc-400 focus:outline-none resize-none overflow-y-auto"
               />
             </div>
             <Button
