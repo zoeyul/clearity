@@ -1,14 +1,26 @@
 "use client";
 
-import { useEffect, useState, useMemo } from "react";
+import { useEffect, useState, useMemo, useRef } from "react";
 import { useRouter } from "next/navigation";
 import { Button, Checkbox } from "@clearity/ui";
-import { Sparkles, Brain, Zap, GitBranch } from "lucide-react";
+import { Sparkles, Zap, GitBranch } from "lucide-react";
 import { cn } from "@clearity/ui/lib/utils";
 import { createClient } from "@clearity/lib";
 import { useDashboard } from "@/hooks/use-dashboard";
 import { useChatHistory } from "@/hooks/use-chat-history";
 import { LeftSidebar } from "@/components/dashboard/left-sidebar";
+import { forceSimulation, forceLink, forceManyBody, forceCenter, forceCollide, type SimulationNodeDatum, type SimulationLinkDatum } from "d3-force";
+function cosineSimilarity(a: number[], b: number[]): number {
+  if (a.length !== b.length) return 0;
+  let dot = 0, magA = 0, magB = 0;
+  for (let i = 0; i < a.length; i++) {
+    dot += a[i] * b[i];
+    magA += a[i] * a[i];
+    magB += b[i] * b[i];
+  }
+  const mag = Math.sqrt(magA) * Math.sqrt(magB);
+  return mag === 0 ? 0 : dot / mag;
+}
 
 export function ReflectionDashboard() {
   const router = useRouter();
@@ -19,32 +31,87 @@ export function ReflectionDashboard() {
   const [isExtracting, setIsExtracting] = useState(false);
   const [expandedMain, setExpandedMain] = useState<string | null>(null);
   const [canvasKeywords, setCanvasKeywords] = useState<
-    { id: string; text: string; hierarchy: "main" | "sub"; parentId?: string; opacity: number }[]
+    { id: string; text: string; hierarchy: "main" | "sub"; parentId?: string; hitCount?: number }[]
   >([]);
   const [hasApiKey, setHasApiKey] = useState(true);
-
-  // Golden angle spiral layout
-  const calcPositions = (count: number) => {
-    const goldenAngle = Math.PI * (3 - Math.sqrt(5));
-    return Array.from({ length: count }, (_, i) => {
-      const angle = i * goldenAngle;
-      const radius = Math.min(35, 8 + i * 4);
-      return {
-        x: 50 + radius * Math.cos(angle),
-        y: 45 + radius * Math.sin(angle) * 0.7,
-      };
-    });
-  };
+  const [similarities, setSimilarities] = useState<
+    { sourceId: string; targetId: string; score: number }[]
+  >([]);
 
   const mainKeywords = useMemo(
     () => canvasKeywords.filter(k => k.hierarchy === "main"),
     [canvasKeywords],
   );
 
-  const keywordPositions = useMemo(
-    () => calcPositions(mainKeywords.length),
-    [mainKeywords.length],
-  );
+  // d3-force simulation for node positioning
+  interface ForceNode extends SimulationNodeDatum {
+    id: string;
+    text: string;
+    hitCount: number;
+  }
+
+  const [nodePositions, setNodePositions] = useState<Map<string, { x: number; y: number }>>(new Map());
+  const simulationRef = useRef<ReturnType<typeof forceSimulation<ForceNode>> | null>(null);
+
+  // Stable key: only re-run simulation when keyword IDs or relations actually change
+  const mainKeywordIds = mainKeywords.map(k => k.id).join(",");
+  const similarityKey = similarities.map(r => `${r.sourceId}-${r.targetId}`).join(",");
+
+  useEffect(() => {
+    if (mainKeywords.length === 0) {
+      setNodePositions(new Map());
+      return;
+    }
+
+    const maxHitCount = Math.max(...mainKeywords.map(k => k.hitCount ?? 1));
+
+    // hit_count 가장 높은 노드를 중앙에 고정
+    const topId = mainKeywords.reduce((a, b) => ((a.hitCount ?? 1) >= (b.hitCount ?? 1) ? a : b)).id;
+
+    const nodes: ForceNode[] = mainKeywords.map((kw, i) => ({
+      id: kw.id,
+      text: kw.text,
+      hitCount: kw.hitCount ?? 1,
+      x: 250 + (Math.random() - 0.5) * 120,
+      y: 200 + (Math.random() - 0.5) * 100,
+      ...(kw.id === topId ? { fx: 250, fy: 200 } : {}),
+    }));
+
+    const links: SimulationLinkDatum<ForceNode>[] = similarities
+      .filter(r => nodes.some(n => n.id === r.sourceId) && nodes.some(n => n.id === r.targetId))
+      .map(r => ({
+        source: r.sourceId,
+        target: r.targetId,
+        strength: r.score * 1.5,
+        distance: Math.max(40, 180 * (1 - r.score)),
+      }));
+
+    if (simulationRef.current) simulationRef.current.stop();
+
+    const sim = forceSimulation(nodes)
+      .force("link", forceLink<ForceNode, SimulationLinkDatum<ForceNode>>(links)
+        .id(d => d.id)
+        .distance((d: SimulationLinkDatum<ForceNode> & { distance?: number }) => d.distance ?? 120)
+        .strength((d: SimulationLinkDatum<ForceNode> & { strength?: number }) => d.strength ?? 0.5))
+      .force("charge", forceManyBody().strength(-10))
+      .force("center", forceCenter(250, 200))
+      .force("collide", forceCollide(35))
+      .on("tick", () => {
+        const positions = new Map<string, { x: number; y: number }>();
+        nodes.forEach(n => {
+          positions.set(n.id, {
+            x: Math.max(40, Math.min(460, n.x ?? 250)),
+            y: Math.max(40, Math.min(360, n.y ?? 200)),
+          });
+        });
+        setNodePositions(new Map(positions));
+      });
+
+    simulationRef.current = sim;
+
+    return () => { sim.stop(); };
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [mainKeywordIds, similarityKey]);
 
   // Fixed particle positions
   const particles = useMemo(
@@ -73,7 +140,7 @@ export function ReflectionDashboard() {
 
       const { data } = await supabase
         .from("session_keywords")
-        .select("id, label, hierarchy, status, parent_id")
+        .select("id, label, hierarchy, status, parent_id, hit_count, embedding")
         .eq("user_id", user.id)
         .in("status", ["fragment", "clustered", "core"]);
 
@@ -83,26 +150,25 @@ export function ReflectionDashboard() {
           text: kw.label,
           hierarchy: (kw.hierarchy ?? "sub") as "main" | "sub",
           parentId: kw.parent_id ?? undefined,
-          opacity: kw.status === "core" ? 1 : kw.status === "clustered" ? 0.8 : 0.6,
+          hitCount: kw.hit_count ?? 1,
         })));
+
+        // Compute similarities between main keywords from embeddings
+        const mains = data.filter(k => k.hierarchy === "main" && k.embedding);
+        const sims: { sourceId: string; targetId: string; score: number }[] = [];
+        for (let i = 0; i < mains.length; i++) {
+          for (let j = i + 1; j < mains.length; j++) {
+            const score = cosineSimilarity(mains[i].embedding as number[], mains[j].embedding as number[]);
+            if (score > 0.3) {
+              sims.push({ sourceId: mains[i].id, targetId: mains[j].id, score });
+            }
+          }
+        }
+        setSimilarities(sims);
       }
     };
     loadKeywords();
   }, [supabase]);
-
-  // Keyword opacity animation
-  useEffect(() => {
-    if (canvasKeywords.length === 0) return;
-    const interval = setInterval(() => {
-      setCanvasKeywords((prev) =>
-        prev.map((kw) => ({
-          ...kw,
-          opacity: Math.max(0.4, Math.min(1, kw.opacity + (Math.random() - 0.5) * 0.2)),
-        })),
-      );
-    }, 2500);
-    return () => clearInterval(interval);
-  }, [canvasKeywords.length]);
 
   // Extract keywords from input via Gemini
   const handleExtract = async () => {
@@ -131,57 +197,74 @@ export function ReflectionDashboard() {
 
       if (res.ok) {
         const data = await res.json();
-        const { data: { user } } = await supabase.auth.getUser();
-        if (!user) return;
 
-        // Insert main keyword first
-        const { data: mainInserted } = await supabase
-          .from("session_keywords")
-          .insert({ label: data.main, intensity: "high", hierarchy: "main", status: "fragment", user_id: user.id })
-          .select("id, label, hierarchy")
-          .single();
+        if (data.action === "merged") {
+          // Same topic — update hit_count in local state
+          setCanvasKeywords((prev) =>
+            prev.map((kw) =>
+              kw.id === data.mergedInto
+                ? { ...kw, hitCount: (kw.hitCount ?? 1) + 1 }
+                : kw
+            )
+          );
+        } else if (data.action === "created") {
+          const { data: { user } } = await supabase.auth.getUser();
+          if (!user) return;
 
-        if (mainInserted) {
-          const newKeywords: typeof canvasKeywords = [{
-            id: mainInserted.id,
-            text: mainInserted.label,
-            hierarchy: "main",
-            opacity: 0,
-          }];
+          // Insert main keyword
+          const { data: mainInserted } = await supabase
+            .from("session_keywords")
+            .insert({
+              label: data.main, intensity: "high", hierarchy: "main",
+              status: "fragment", user_id: user.id, hit_count: 1,
+              embedding: data.embeddings?.[data.main] ?? null,
+            })
+            .select("id, label, hierarchy")
+            .single();
 
-          // Insert sub keywords with parent_id
-          if (data.subs?.length) {
-            const subsToInsert = data.subs.map((sub: string) => ({
-              label: sub, intensity: "medium", hierarchy: "sub", status: "fragment",
-              user_id: user.id, parent_id: mainInserted.id,
-            }));
+          if (mainInserted) {
+            const newKeywords: typeof canvasKeywords = [{
+              id: mainInserted.id,
+              text: mainInserted.label,
+              hierarchy: "main",
+              hitCount: 1,
+            }];
 
-            const { data: subsInserted } = await supabase
-              .from("session_keywords")
-              .insert(subsToInsert)
-              .select("id, label, hierarchy");
+            // Insert sub keywords
+            if (data.subs?.length) {
+              const subsToInsert = data.subs.map((sub: string) => ({
+                label: sub, intensity: "medium", hierarchy: "sub", status: "fragment",
+                user_id: user.id, parent_id: mainInserted.id,
+                embedding: data.embeddings?.[sub] ?? null,
+              }));
 
-            if (subsInserted) {
-              newKeywords.push(...subsInserted.map((kw) => ({
-                id: kw.id,
-                text: kw.label,
-                hierarchy: "sub" as const,
-                parentId: mainInserted.id,
-                opacity: 0,
-              })));
+              const { data: subsInserted } = await supabase
+                .from("session_keywords")
+                .insert(subsToInsert)
+                .select("id, label, hierarchy");
+
+              if (subsInserted) {
+                newKeywords.push(...subsInserted.map((kw) => ({
+                  id: kw.id,
+                  text: kw.label,
+                  hierarchy: "sub" as const,
+                  parentId: mainInserted.id,
+                })));
+              }
             }
-          }
 
-          // Fade in new keywords
-          setCanvasKeywords((prev) => [...prev, ...newKeywords]);
-          setTimeout(() => {
-            setCanvasKeywords((prev) =>
-              prev.map((kw) => ({
-                ...kw,
-                opacity: kw.opacity === 0 ? (kw.hierarchy === "main" ? 0.9 : 0.6) : kw.opacity,
-              })),
-            );
-          }, 100);
+            // Update similarities from API response
+            if (data.similarities?.length) {
+              const newSims = data.similarities.map((s: { id: string; score: number }) => ({
+                sourceId: s.id,
+                targetId: mainInserted.id,
+                score: s.score,
+              }));
+              setSimilarities((prev) => [...prev, ...newSims]);
+            }
+
+            setCanvasKeywords((prev) => [...prev, ...newKeywords]);
+          }
         }
       }
     } catch {
@@ -192,6 +275,12 @@ export function ReflectionDashboard() {
   };
 
   const handleKeywordClick = async (keywordText: string) => {
+    // If there's an active session, go to it instead of creating new
+    if (hasActiveSession && activeSession) {
+      router.push(`/chat/${activeSession.id}`);
+      return;
+    }
+
     const {
       data: { user },
     } = await supabase.auth.getUser();
@@ -217,20 +306,9 @@ export function ReflectionDashboard() {
     percentage: Math.max(10, 40 - i * 8),
   }));
 
-  // Cognitive snapshot from DB
-  const cognitiveSnapshot = {
-    thoughtDensity:
-      dashboard.totalMessageCount > 50
-        ? "High"
-        : dashboard.totalMessageCount > 20
-          ? "Medium"
-          : "Low",
-    explorationDepth: Math.min(
-      5,
-      Math.max(1, Math.floor(dashboard.recentSessionCount / 2)),
-    ),
-    primaryKeyword: dashboard.topKeywords[0] ?? "—",
-  };
+  // Check for active session
+  const activeSession = chatHistory.sessions.find(s => s.status === "active");
+  const hasActiveSession = !!activeSession;
 
   if (dashboard.isLoading) {
     return (
@@ -272,40 +350,24 @@ export function ReflectionDashboard() {
 
         {/* ========== CENTER: Thought Canvas ========== */}
         <main className="flex-1 flex flex-col gap-4">
-          {/* Cognitive Snapshot */}
+          {/* Header */}
           <div className="glass !rounded-3xl px-6 py-4">
             <div className="flex items-center justify-between">
-              <div className="flex items-center gap-3">
-                <Brain className="h-5 w-5 text-indigo-500" />
-                <h1 className="text-lg font-semibold text-slate-800 dark:text-white">
-                  Cognitive Snapshot
+              <div>
+                <h1 className="text-lg font-bold text-slate-800 dark:text-white">
+                  {dashboard.userName ? `Hi, ${dashboard.userName}.` : "Hi."}
                 </h1>
+                <p className="text-sm font-medium text-slate-400 dark:text-slate-500 mt-0.5">
+                  Clear your mind, find your clarity
+                </p>
               </div>
-              <div className="flex items-center gap-8">
-                <div className="text-center">
-                  <p className="text-[10px] text-slate-500 uppercase tracking-wide">
-                    Density
-                  </p>
-                  <p className="text-sm font-semibold text-slate-800 dark:text-white">
-                    {cognitiveSnapshot.thoughtDensity}
-                  </p>
-                </div>
-                <div className="text-center">
-                  <p className="text-[10px] text-slate-500 uppercase tracking-wide">
-                    Depth
-                  </p>
-                  <p className="text-sm font-semibold text-slate-800 dark:text-white">
-                    Level {cognitiveSnapshot.explorationDepth}
-                  </p>
-                </div>
-                <div className="text-center">
-                  <p className="text-[10px] text-slate-500 uppercase tracking-wide">
-                    Focus
-                  </p>
-                  <p className="text-sm font-semibold text-indigo-600 dark:text-indigo-400">
-                    {cognitiveSnapshot.primaryKeyword}
-                  </p>
-                </div>
+              <div className="text-center">
+                <p className="text-[10px] text-slate-500 uppercase tracking-wide">
+                  Focus
+                </p>
+                <p className="text-sm font-semibold text-slate-700 dark:text-slate-200">
+                  {hasActiveSession ? activeSession.title : "—"}
+                </p>
               </div>
             </div>
           </div>
@@ -313,7 +375,7 @@ export function ReflectionDashboard() {
           {/* Thought Canvas */}
           <div className="flex-1 glass !rounded-3xl p-6 relative overflow-hidden" style={{ perspective: "600px", perspectiveOrigin: "50% 45%" }}>
             {/* Ambient Particles — visible when canvas is empty */}
-            {(canvasKeywords.length === 0 || isExtracting) && (
+            {canvasKeywords.length === 0 && (
               <div className="absolute inset-0 flex items-center justify-center">
                 {/* Particle field */}
                 {particles.map((p, i) => (
@@ -355,15 +417,40 @@ export function ReflectionDashboard() {
               </div>
             )}
 
+            {/* Relation Lines */}
+            <svg className="absolute inset-0 w-full h-full pointer-events-none z-[5]">
+              {similarities.map((sim, i) => {
+                const sourcePos = nodePositions.get(sim.sourceId);
+                const targetPos = nodePositions.get(sim.targetId);
+                if (!sourcePos || !targetPos) return null;
+
+                const sx = (sourcePos.x / 500) * 100;
+                const sy = (sourcePos.y / 400) * 100;
+                const tx = (targetPos.x / 500) * 100;
+                const ty = (targetPos.y / 400) * 100;
+
+                return (
+                  <line
+                    key={`sim-${i}`}
+                    x1={`${sx}%`} y1={`${sy}%`}
+                    x2={`${tx}%`} y2={`${ty}%`}
+                    stroke={`rgba(148, 163, 184, ${sim.score * 0.6})`}
+                    strokeWidth={1 + sim.score * 1.5}
+                    strokeLinecap="round"
+                  />
+                );
+              })}
+            </svg>
+
             {/* Keyword Constellation */}
             <div className="absolute inset-0 pointer-events-none z-10">
 
               {/* Main keywords — pill stays in place, note slides out */}
               {mainKeywords.map((kw, i) => {
-                const pos = keywordPositions[i];
+                const pos = nodePositions.get(kw.id);
                 if (!pos) return null;
-                const x = pos.x;
-                const y = pos.y;
+                const x = (pos.x / 500) * 100;
+                const y = (pos.y / 400) * 100;
                 const isExpanded = expandedMain === kw.text;
                 const isFaded = expandedMain !== null && !isExpanded;
                 const subs = canvasKeywords.filter(k => k.hierarchy === "sub" && k.parentId === kw.id);
@@ -376,6 +463,7 @@ export function ReflectionDashboard() {
                     style={{
                       left: `${x}%`,
                       top: `${y}%`,
+                      translate: "-50% -50%",
                       opacity: isFaded ? 0.15 : 1,
                       filter: isFaded ? "blur(3px)" : "none",
                       transition: "opacity 0.4s, filter 0.4s",
@@ -455,6 +543,12 @@ export function ReflectionDashboard() {
             {/* Input */}
             <div className="absolute inset-x-0 bottom-6 flex justify-center px-6">
               <div className="w-full max-w-xl">
+                {/* Extracting status — above input when keywords exist */}
+                {isExtracting && canvasKeywords.length > 0 && (
+                  <p className="text-center text-[11px] text-zinc-500 mb-2 animate-pulse">
+                    Extracting your thoughts...
+                  </p>
+                )}
                 <div className="relative rounded-2xl bg-slate-100/90 dark:bg-slate-700/60 overflow-hidden">
                   <textarea
                     value={inputValue}

@@ -5,6 +5,7 @@ import {
   Plus,
   Sparkles,
   Clock,
+  StickyNote,
   Settings,
   ChevronRight,
   LogOut,
@@ -70,6 +71,7 @@ export function LeftSidebar({
         <div className="flex flex-col gap-1">
           {[
             { icon: Clock, label: "Chat History", href: "/history" },
+            { icon: StickyNote, label: "Notes", href: "/notes" },
           ].map((item) => (
             <button
               key={item.label}

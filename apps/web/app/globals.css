@@ -387,11 +387,11 @@
 /* ─── Keyword bounce animation ─── */
 @keyframes keyword-bounce {
   0%, 100% {
-    transform: translate(-50%, -50%) translateY(0);
+    transform: translateY(0);
     animation-timing-function: cubic-bezier(0.4, 0, 0.2, 1);
   }
   50% {
-    transform: translate(-50%, -50%) translateY(-5px);
+    transform: translateY(-5px);
     animation-timing-function: cubic-bezier(0.8, 0, 0.6, 1);
   }
 }
