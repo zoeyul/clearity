@@ -28,19 +28,16 @@ export function useChatHistory() {
     const { data: { user } } = await supabase.auth.getUser()
     if (!user) return null
 
-    const { data } = await supabase
+    const id = crypto.randomUUID()
+    const { error } = await supabase
       .from("chat_sessions")
-      .insert({ title: "New Chat", user_id: user.id })
-      .select()
-      .single()
+      .insert({ id, title: "New Chat", user_id: user.id })
 
-    if (data) {
-      const session = data as ChatSession
-      setSessions((prev) => [session, ...prev])
-      return session
-    }
+    if (error) return null
 
-    return null
+    const session = { id, title: "New Chat", user_id: user.id, status: "active", created_at: new Date().toISOString(), updated_at: new Date().toISOString() } as ChatSession
+    setSessions((prev) => [session, ...prev])
+    return session
   }, [supabase])
 
   return { sessions, isLoading, createSession, refetch: fetchSessions }

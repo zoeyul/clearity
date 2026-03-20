@@ -330,13 +330,8 @@ export function ReflectionDashboard() {
   };
 
   const handleKeywordClick = async (keywordText: string) => {
-    if (hasActiveSession && activeSession) {
-      setIsNavigating(true);
-      router.push(`/chat/${activeSession.id}`);
-      return;
-    }
-
     setIsNavigating(true);
+
     const {
       data: { user },
     } = await supabase.auth.getUser();
@@ -345,16 +340,21 @@ export function ReflectionDashboard() {
       return;
     }
 
-    const { data, error } = await supabase
+    const id = crypto.randomUUID();
+    const { error } = await supabase
       .from("chat_sessions")
-      .insert({ title: keywordText, user_id: user.id })
-      .select()
-      .single();
-    console.log("[handleKeywordClick]", { data, error });
-    if (data)
-      router.push(
-        `/chat/${data.id}?keyword=${encodeURIComponent(keywordText)}`,
-      );
+      .insert({ id, title: keywordText, user_id: user.id });
+
+    if (error) {
+      console.error("[handleKeywordClick] insert failed:", error);
+      setIsNavigating(false);
+      return;
+    }
+
+    chatHistory.refetch();
+    router.push(
+      `/chat/${id}?keyword=${encodeURIComponent(keywordText)}`,
+    );
   };
 
   const handleSelectSession = (sessionId: string) =>

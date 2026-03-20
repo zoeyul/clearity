@@ -2,7 +2,7 @@
 
 import { useState, useRef, useEffect, useCallback } from "react"
 import { useChat } from "@ai-sdk/react"
-import { TextStreamChatTransport } from "ai"
+import { DefaultChatTransport } from "ai"
 import { motion } from "framer-motion"
 import { Button } from "@clearity/ui"
 import { createClient } from "@clearity/lib"
@@ -63,13 +63,14 @@ function ChatAreaInner({
   const [subKeywords, setSubKeywords] = useState<string[]>([])
   const [dbMessages, setDbMessages] = useState<{ id: string; role: "user" | "assistant"; content: string }[]>([])
   const scrollRef = useRef<HTMLDivElement>(null)
-  const supabase = createClient()
-  const savedCountRef = useRef(0)
+  const supabaseRef = useRef(createClient())
+  const supabase = supabaseRef.current
+  const lastSavedIdRef = useRef<string | null>(null)
   const noApiKey = !apiKey
 
   const { messages: liveMessages, sendMessage, status } = useChat({
     id: sessionId,
-    transport: new TextStreamChatTransport({
+    transport: new DefaultChatTransport({
       api: "/api/chat",
       body: { apiKey, aboutMe },
     }),
@@ -89,7 +90,6 @@ function ChatAreaInner({
           role: m.role as "user" | "assistant",
           content: m.content,
         })))
-        savedCountRef.current = data.length
       }
     }
     loadMessages()
@@ -107,24 +107,33 @@ function ChatAreaInner({
 
   const isStreaming = status === "streaming" || status === "submitted"
 
-  // Save new messages to DB when streaming completes
+  // Greeting card is always shown separately — skip duplicate from DB
+  const displayMessages = messages.length > 0 && messages[0].role === "assistant"
+    ? messages.slice(1)
+    : messages
+
+  // Save assistant response to DB when streaming completes
   useEffect(() => {
     if (status !== "ready" || liveMessages.length === 0) return
-    const unsaved = liveMessages.slice(savedCountRef.current - dbMessages.length)
-    if (unsaved.length === 0) return
+    const lastMsg = liveMessages[liveMessages.length - 1]
+    if (!lastMsg || lastMsg.role !== "assistant") return
+    if (lastMsg.id === lastSavedIdRef.current) return
 
-    const saveMessages = async () => {
-      const toInsert = unsaved.map(m => ({
-        session_id: sessionId,
-        role: m.role,
-        content: m.parts?.filter(p => p.type === "text").map(p => (p as { type: "text"; text: string }).text).join("") ?? "",
-      }))
-      const { error } = await supabase.from("messages").insert(toInsert)
-      console.log("[saveMessages]", { toInsert, error })
-      savedCountRef.current = dbMessages.length + liveMessages.length
+    const content = lastMsg.parts
+      ?.filter(p => p.type === "text")
+      .map(p => (p as { type: "text"; text: string }).text)
+      .join("") ?? ""
+    if (!content) return
+
+    const save = async () => {
+      const { error } = await supabase
+        .from("messages")
+        .insert({ session_id: sessionId, role: "assistant", content })
+      console.log("[saveAssistant]", { content: content.slice(0, 50), error })
+      if (!error) lastSavedIdRef.current = lastMsg.id
     }
-    saveMessages()
-  }, [status, liveMessages.length, sessionId, supabase, dbMessages.length])
+    save()
+  }, [status, liveMessages.length, sessionId, supabase])
 
   // Auto-scroll
   useEffect(() => {
@@ -139,7 +148,7 @@ function ChatAreaInner({
     const messageText = inputValue
     const isFirstMessage = messages.length === 0
 
-    // Save greeting + first user message to DB
+    // Save greeting + first user message, or just user message for subsequent
     if (isFirstMessage) {
       const greeting = keyword
         ? `I see you're focusing on '${keyword}'. Want to dig deeper, or is there something specific about it that's been stuck?`
@@ -149,7 +158,11 @@ function ChatAreaInner({
         { session_id: sessionId, role: "user", content: messageText },
       ])
       console.log("[firstMessage]", { error })
-      savedCountRef.current = 2
+    } else {
+      const { error } = await supabase
+        .from("messages")
+        .insert({ session_id: sessionId, role: "user", content: messageText })
+      console.log("[userMessage]", { error })
     }
 
     sendMessage({ text: messageText })
@@ -281,31 +294,32 @@ function ChatAreaInner({
               <p className="text-xs text-zinc-400">Go to Settings in the sidebar to add your Gemini API key</p>
             </div>
           </div>
-        ) : messages.length === 0 ? (
-          <div className="flex flex-col pt-12 pb-6 px-2">
-            <motion.div
-              initial={{ opacity: 0, y: 10 }}
-              animate={{ opacity: 1, y: 0 }}
-              transition={{ duration: 0.6, ease: "easeOut" }}
-              className="relative glass-subtle !rounded-3xl px-5 py-3.5 text-sm leading-relaxed text-zinc-800 dark:text-zinc-200 w-fit border-l-2 border-l-zinc-300/40 dark:border-l-zinc-600/40"
-            >
-              <Sparkles className="absolute -top-3.5 -left-3.5 h-4 w-4 text-zinc-300 dark:text-zinc-600" />
-              {keyword ? (
-                <>
-                  I see you&apos;re focusing on &apos;
-                  <span className="font-semibold">
-                    {keyword}
-                  </span>
-                  &apos;. Want to dig deeper, or is there something specific about it that&apos;s been stuck?
-                </>
-              ) : (
-                "What's been on your mind lately? No need to organize it — just start wherever feels right."
-              )}
-            </motion.div>
-          </div>
         ) : (
           <div className="flex flex-col gap-6 py-6">
-            {messages.map((message) => (
+            {/* Greeting card — always visible */}
+            <div className="flex justify-start px-2">
+              <motion.div
+                initial={{ opacity: 0, y: 10 }}
+                animate={{ opacity: 1, y: 0 }}
+                transition={{ duration: 0.6, ease: "easeOut" }}
+                className="relative glass-subtle !rounded-3xl px-5 py-3.5 text-sm leading-relaxed text-zinc-800 dark:text-zinc-200 w-fit border-l-2 border-l-zinc-300/40 dark:border-l-zinc-600/40"
+              >
+                <Sparkles className="absolute -top-3.5 -left-3.5 h-4 w-4 text-zinc-300 dark:text-zinc-600" />
+                {keyword ? (
+                  <>
+                    I see you&apos;re focusing on &apos;
+                    <span className="font-semibold">
+                      {keyword}
+                    </span>
+                    &apos;. Want to dig deeper, or is there something specific about it that&apos;s been stuck?
+                  </>
+                ) : (
+                  "What's been on your mind lately? No need to organize it — just start wherever feels right."
+                )}
+              </motion.div>
+            </div>
+
+            {displayMessages.map((message) => (
               <div
                 key={message.id}
                 className={cn(
@@ -325,7 +339,7 @@ function ChatAreaInner({
                     <Sparkles className="absolute -top-3.5 -left-3.5 h-4 w-4 text-zinc-300 dark:text-zinc-600" />
                   )}
                   {message.parts.map((part, i) => {
-                    if (part.type === "text") return <span key={i}>{part.text}</span>
+                    if (part.type === "text") return <span key={i} className="whitespace-pre-wrap">{part.text}</span>
                     return null
                   })}
                 </div>

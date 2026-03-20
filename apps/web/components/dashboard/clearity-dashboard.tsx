@@ -23,27 +23,31 @@ export function ClearityDashboard({ sessionId, keyword }: ClearityDashboardProps
     const { data: { user } } = await supabase.auth.getUser()
     if (!user) return
 
-    const { data } = await supabase
+    const id = crypto.randomUUID()
+    const { error } = await supabase
       .from("chat_sessions")
-      .insert({ title: "New Chat", user_id: user.id })
-      .select()
-      .single()
-    if (data) router.push(`/chat/${data.id}`)
+      .insert({ id, title: "New Chat", user_id: user.id })
+    if (error) {
+      console.error("[handleNewChat] insert failed:", error)
+      return
+    }
+    chatHistory.refetch()
+    router.push(`/chat/${id}`)
   }
 
   const handleSelectSession = (id: string) => router.push(`/chat/${id}`)
 
-  // Delete empty session on leave — server checks message count
+  // Clean up empty sessions on page leave (not on React Strict Mode remount)
   useEffect(() => {
-    const cleanup = () => {
+    const mountedAt = Date.now()
+    const handleBeforeUnload = () => {
       fetch(`/api/sessions/${sessionId}/cleanup`, { method: "POST", keepalive: true })
     }
-
-    window.addEventListener("beforeunload", cleanup)
-
+    window.addEventListener("beforeunload", handleBeforeUnload)
     return () => {
-      window.removeEventListener("beforeunload", cleanup)
-      cleanup()
+      window.removeEventListener("beforeunload", handleBeforeUnload)
+      if (Date.now() - mountedAt < 2000) return
+      fetch(`/api/sessions/${sessionId}/cleanup`, { method: "POST", keepalive: true })
     }
   }, [sessionId])
 

@@ -25,13 +25,11 @@ export default function HistoryPage() {
   const handleNewSession = async () => {
     const { data: { user } } = await supabase.auth.getUser()
     if (!user) return
-
-    const { data } = await supabase
+    const id = crypto.randomUUID()
+    const { error } = await supabase
       .from("chat_sessions")
-      .insert({ title: "New Chat", user_id: user.id })
-      .select()
-      .single()
-    if (data) router.push(`/chat/${data.id}`)
+      .insert({ id, title: "New Chat", user_id: user.id })
+    if (!error) router.push(`/chat/${id}`)
   }
 
   const handleSelectSession = (sessionId: string) => router.push(`/chat/${sessionId}`)
