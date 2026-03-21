@@ -11,7 +11,7 @@ import {
   Skeleton,
   ScrollArea,
 } from "@clearity/ui"
-import { CheckCircle2, Sparkles, RotateCcw, X, Plus, Pencil } from "lucide-react"
+import { CheckCircle2, Sparkles, RotateCcw, X, Plus, Pencil, MessageSquare } from "lucide-react"
 import { createClient } from "@clearity/lib"
 import { cn } from "@clearity/ui/lib/utils"
 import type { ActionItem, SessionSummary } from "@clearity/lib"
@@ -21,9 +21,10 @@ interface ClarifyModalProps {
   onOpenChange: (open: boolean) => void
   sessionId: string
   onConfirm: () => Promise<unknown>
+  onViewChat?: () => void
 }
 
-export function ClarifyModal({ open, onOpenChange, sessionId, onConfirm }: ClarifyModalProps) {
+export function ClarifyModal({ open, onOpenChange, sessionId, onConfirm, onViewChat }: ClarifyModalProps) {
   const [isLoading, setIsLoading] = useState(false)
   const [error, setError] = useState<string | null>(null)
   const [summary, setSummary] = useState<SessionSummary | null>(null)
@@ -303,7 +304,21 @@ export function ClarifyModal({ open, onOpenChange, sessionId, onConfirm }: Clari
             </ScrollArea>
 
             {/* Footer */}
-            <div className="flex items-center justify-end gap-3 border-t border-white/15 px-5 py-3">
+            <div className="flex items-center justify-between border-t border-white/15 px-5 py-3">
+              {onViewChat ? (
+                <Button
+                  variant="ghost"
+                  size="sm"
+                  onClick={onViewChat}
+                  className="glass-interactive !rounded-xl text-zinc-500 gap-1.5"
+                >
+                  <MessageSquare className="h-3.5 w-3.5" />
+                  View Conversation
+                </Button>
+              ) : (
+                <div />
+              )}
+              <div className="flex items-center gap-3">
               <Button
                 variant="ghost"
                 size="sm"
@@ -321,6 +336,7 @@ export function ClarifyModal({ open, onOpenChange, sessionId, onConfirm }: Clari
                 <CheckCircle2 className="h-3.5 w-3.5" />
                 {isConfirming ? "Saving..." : "Confirm"}
               </Button>
+              </div>
             </div>
           </>
         )}

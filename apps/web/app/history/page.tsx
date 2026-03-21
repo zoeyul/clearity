@@ -1,11 +1,13 @@
 "use client"
 
+import { useState } from "react"
 import { useRouter } from "next/navigation"
 import { useChatHistory } from "@/hooks/use-chat-history"
 import { createClient } from "@clearity/lib"
-import { MessageSquare } from "lucide-react"
+import { MessageSquare, Sparkles } from "lucide-react"
 import { cn } from "@clearity/ui/lib/utils"
 import { LeftSidebar } from "@/components/dashboard/left-sidebar"
+import { ClarifyModal } from "@/components/dashboard/clarify-modal"
 
 function formatDate(dateStr: string) {
   const date = new Date(dateStr)
@@ -17,10 +19,27 @@ function formatDate(dateStr: string) {
   return date.toLocaleDateString("en-US", { month: "short", day: "numeric" })
 }
 
+function formatDuration(startedAt: string, endedAt: string | null) {
+  const start = new Date(startedAt)
+  const end = endedAt ? new Date(endedAt) : new Date()
+  const diffMs = end.getTime() - start.getTime()
+  const minutes = Math.floor(diffMs / 60000)
+
+  if (minutes < 1) return "< 1 min"
+  if (minutes < 60) return `${minutes} min`
+  const hours = Math.floor(minutes / 60)
+  if (hours < 24) return `${hours}h ${minutes % 60}m`
+  const days = Math.floor(hours / 24)
+  if (days < 30) return `${days}d`
+  const months = Math.floor(days / 30)
+  return `${months}mo`
+}
+
 export default function HistoryPage() {
   const router = useRouter()
   const chatHistory = useChatHistory()
   const supabase = createClient()
+  const [clarifySessionId, setClarifySessionId] = useState<string | null>(null)
 
   const handleNewSession = async () => {
     const { data: { user } } = await supabase.auth.getUser()
@@ -74,16 +93,19 @@ export default function HistoryPage() {
             ) : (
               <div className="flex flex-col gap-3">
                 {chatHistory.sessions.map((session) => (
-                  <button
+                  <div
                     key={session.id}
-                    onClick={() => handleSelectSession(session.id)}
-                    className="glass-subtle !rounded-2xl p-5 text-left hover:scale-[1.005] transition-all"
+                    onClick={() => session.status === "completed" ? setClarifySessionId(session.id) : handleSelectSession(session.id)}
+                    className="glass-subtle !rounded-2xl p-5 text-left hover:scale-[1.005] transition-all cursor-pointer"
                   >
                     <div className="flex items-center justify-between mb-1">
                       <span className="text-sm font-semibold text-zinc-800 dark:text-zinc-100">
                         {session.title}
                       </span>
                       <div className="flex items-center gap-2">
+                        {session.status === "completed" && (
+                          <Sparkles className="h-3 w-3 text-zinc-400" />
+                        )}
                         <span className={cn(
                           "text-[10px] px-2 py-0.5 rounded-full font-medium",
                           session.status === "active"
@@ -102,18 +124,27 @@ export default function HistoryPage() {
                         {session.preview}
                       </p>
                     )}
-                    {session.duration_minutes && (
-                      <p className="text-[10px] text-zinc-400 mt-2">
-                        {session.duration_minutes} min
-                      </p>
-                    )}
-                  </button>
+                    <p className="text-[10px] text-zinc-400 mt-2">
+                      {new Date(session.started_at).toLocaleDateString("en-US", { year: "numeric", month: "short", day: "numeric" })}
+                      {" · "}
+                      {formatDuration(session.started_at, session.ended_at)}
+                    </p>
+                  </div>
                 ))}
               </div>
             )}
           </div>
         </main>
       </div>
+      {clarifySessionId && (
+        <ClarifyModal
+          open={!!clarifySessionId}
+          onOpenChange={(open) => { if (!open) setClarifySessionId(null) }}
+          sessionId={clarifySessionId}
+          onConfirm={async () => {}}
+          onViewChat={() => { router.push(`/chat/${clarifySessionId}`); setClarifySessionId(null) }}
+        />
+      )}
     </div>
   )
 }
