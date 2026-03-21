@@ -13,9 +13,10 @@ const ExtractionSchema = z.object({
 })
 
 export async function POST(req: Request) {
-  const { message, apiKey }: {
+  const { message, apiKey, sessionId }: {
     message: string
     apiKey: string
+    sessionId?: string
   } = await req.json()
 
   if (!apiKey) {
@@ -99,6 +100,7 @@ User message: "${message}"`,
           status: "fragment",
           user_id: user.id,
           parent_id: matchedKeywordId,
+          ...(sessionId ? { session_id: sessionId } : {}),
         }))
 
         const { data } = await supabase
@@ -138,6 +140,7 @@ User message: "${message}"`,
         user_id: user.id,
         hit_count: 1,
         embedding: mainEmbedding,
+        ...(sessionId ? { session_id: sessionId } : {}),
       })
       .select("id")
       .single()
@@ -156,6 +159,7 @@ User message: "${message}"`,
         status: "fragment",
         user_id: user.id,
         parent_id: mainInserted.id,
+        ...(sessionId ? { session_id: sessionId } : {}),
       }))
 
       const { data } = await supabase

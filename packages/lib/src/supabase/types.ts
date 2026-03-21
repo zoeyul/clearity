@@ -150,6 +150,78 @@ export interface Database {
         }
         Relationships: []
       }
+      user_profiles: {
+        Row: {
+          id: string
+          user_id: string
+          interests: string
+          patterns: string
+          threshold: string
+          assets: string
+          created_at: string
+          updated_at: string
+        }
+        Insert: {
+          id?: string
+          user_id: string
+          interests?: string
+          patterns?: string
+          threshold?: string
+          assets?: string
+          created_at?: string
+          updated_at?: string
+        }
+        Update: {
+          id?: string
+          user_id?: string
+          interests?: string
+          patterns?: string
+          threshold?: string
+          assets?: string
+          created_at?: string
+          updated_at?: string
+        }
+        Relationships: []
+      }
+      session_summaries: {
+        Row: {
+          id: string
+          session_id: string
+          user_id: string
+          contradiction: string
+          main_keywords: string[]
+          personality_insight: string
+          reframing: string
+          user_note: string
+          created_at: string
+          updated_at: string
+        }
+        Insert: {
+          id?: string
+          session_id: string
+          user_id: string
+          contradiction: string
+          main_keywords?: string[]
+          personality_insight: string
+          reframing: string
+          user_note?: string
+          created_at?: string
+          updated_at?: string
+        }
+        Update: {
+          id?: string
+          session_id?: string
+          user_id?: string
+          contradiction?: string
+          main_keywords?: string[]
+          personality_insight?: string
+          reframing?: string
+          user_note?: string
+          created_at?: string
+          updated_at?: string
+        }
+        Relationships: []
+      }
     }
     Views: Record<string, never>
     Functions: Record<string, never>
@@ -163,3 +235,5 @@ export type Message = Database["public"]["Tables"]["messages"]["Row"]
 export type SessionKeyword = Database["public"]["Tables"]["session_keywords"]["Row"]
 export type SessionEmotion = Database["public"]["Tables"]["session_emotions"]["Row"]
 export type ActionItem = Database["public"]["Tables"]["action_items"]["Row"]
+export type SessionSummary = Database["public"]["Tables"]["session_summaries"]["Row"]
+export type UserProfile = Database["public"]["Tables"]["user_profiles"]["Row"]

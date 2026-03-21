@@ -662,7 +662,7 @@ export function ReflectionDashboard() {
                     placeholder="What's on your mind?"
                     disabled={isExtracting}
                     rows={1}
-                    className="w-full min-h-[48px] max-h-[160px] px-5 py-3 pr-12 bg-transparent text-sm text-slate-800 dark:text-white placeholder:text-slate-400 focus:outline-none resize-none overflow-y-auto"
+                    className="block w-full max-h-[160px] px-5 py-3 pr-12 bg-transparent text-sm text-slate-800 dark:text-white placeholder:text-slate-400 focus:outline-none resize-none overflow-y-auto"
                   />
                   <Button
                     size="icon"

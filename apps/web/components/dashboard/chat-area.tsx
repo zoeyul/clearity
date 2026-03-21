@@ -4,6 +4,7 @@ import { useState, useRef, useEffect, useCallback } from "react"
 import { useChat } from "@ai-sdk/react"
 import { DefaultChatTransport } from "ai"
 import { motion } from "framer-motion"
+import { useRouter } from "next/navigation"
 import { Button } from "@clearity/ui"
 import { createClient } from "@clearity/lib"
 import {
@@ -18,6 +19,7 @@ import {
   Sparkles,
 } from "lucide-react"
 import { cn } from "@clearity/ui/lib/utils"
+import { ClarifyModal } from "@/components/dashboard/clarify-modal"
 
 interface ChatAreaProps {
   sessionId: string
@@ -30,15 +32,62 @@ interface ChatAreaProps {
 export function ChatArea(props: ChatAreaProps) {
   const [apiKey, setApiKey] = useState<string | null>(null)
   const [aboutMe, setAboutMe] = useState<string | null>(null)
+  const [userProfile, setUserProfile] = useState<{ interests: string; patterns: string; threshold: string; assets: string } | null>(null)
+  const [initialMessages, setInitialMessages] = useState<{ id: string; role: "user" | "assistant"; parts: { type: "text"; text: string }[] }[] | null>(null)
+  const [loadedKeyword, setLoadedKeyword] = useState<{ main: string | null; subs: string[] }>({ main: null, subs: [] })
   const [isReady, setIsReady] = useState(false)
+  const supabaseRef = useRef(createClient())
 
   useEffect(() => {
     setApiKey(localStorage.getItem("clearity-api-key"))
     setAboutMe(localStorage.getItem("clearity-about-me"))
-    setIsReady(true)
-  }, [])
 
-  if (!isReady) {
+    const loadData = async () => {
+      const [messagesRes, profileRes, keywordsRes, sessionRes] = await Promise.all([
+        supabaseRef.current
+          .from("messages")
+          .select("id, role, content")
+          .eq("session_id", props.sessionId)
+          .order("created_at", { ascending: true }),
+        supabaseRef.current
+          .from("user_profiles")
+          .select("interests, patterns, threshold, assets")
+          .single(),
+        supabaseRef.current
+          .from("session_keywords")
+          .select("label, intensity")
+          .eq("session_id", props.sessionId),
+        supabaseRef.current
+          .from("chat_sessions")
+          .select("title")
+          .eq("id", props.sessionId)
+          .single(),
+      ])
+
+      setInitialMessages(
+        (messagesRes.data ?? []).map(m => ({
+          id: m.id,
+          role: m.role as "user" | "assistant",
+          parts: [{ type: "text" as const, text: m.content }],
+        }))
+      )
+      if (profileRes.data) {
+        setUserProfile(profileRes.data as { interests: string; patterns: string; threshold: string; assets: string })
+      }
+      // Load keywords for this session (fallback to session title)
+      const kws = keywordsRes.data ?? []
+      const mainKw = kws.find(k => k.intensity === "high")
+      const subKws = kws.filter(k => k.intensity !== "high").map(k => k.label)
+      const sessionTitle = sessionRes.data?.title ?? null
+      const mainLabel = mainKw?.label ?? (sessionTitle && sessionTitle !== "New conversation" ? sessionTitle : null)
+      setLoadedKeyword({ main: mainLabel, subs: subKws })
+
+      setIsReady(true)
+    }
+    loadData()
+  }, [props.sessionId])
+
+  if (!isReady || initialMessages === null) {
     return (
       <div className="flex flex-1 items-center justify-center">
         <p className="text-sm text-zinc-400">Loading...</p>
@@ -46,8 +95,12 @@ export function ChatArea(props: ChatAreaProps) {
     )
   }
 
-  return <ChatAreaInner {...props} apiKey={apiKey} aboutMe={aboutMe} />
+  return <ChatAreaInner {...props} apiKey={apiKey} aboutMe={aboutMe} userProfile={userProfile} initialMessages={initialMessages} loadedKeyword={loadedKeyword} />
 }
+
+type InitialMessage = { id: string; role: "user" | "assistant"; parts: { type: "text"; text: string }[] }
+
+type ProfileData = { interests: string; patterns: string; threshold: string; assets: string }
 
 function ChatAreaInner({
   sessionId,
@@ -57,71 +110,62 @@ function ChatAreaInner({
   keyword,
   apiKey,
   aboutMe,
-}: ChatAreaProps & { apiKey: string | null; aboutMe: string | null }) {
+  userProfile,
+  initialMessages,
+  loadedKeyword,
+}: ChatAreaProps & { apiKey: string | null; aboutMe: string | null; userProfile: ProfileData | null; initialMessages: InitialMessage[]; loadedKeyword: { main: string | null; subs: string[] } }) {
+  const router = useRouter()
   const [inputValue, setInputValue] = useState("")
-  const [headerKeyword, setHeaderKeyword] = useState<string | null>(keyword ?? null)
-  const [subKeywords, setSubKeywords] = useState<string[]>([])
-  const [dbMessages, setDbMessages] = useState<{ id: string; role: "user" | "assistant"; content: string }[]>([])
+  const [headerKeyword, setHeaderKeyword] = useState<string | null>(loadedKeyword.main ?? keyword ?? null)
+  const [subKeywords, setSubKeywords] = useState<string[]>(loadedKeyword.subs)
+  const [showClarifyModal, setShowClarifyModal] = useState(false)
   const scrollRef = useRef<HTMLDivElement>(null)
   const supabaseRef = useRef(createClient())
   const supabase = supabaseRef.current
   const lastSavedIdRef = useRef<string | null>(null)
   const noApiKey = !apiKey
 
-  const { messages: liveMessages, sendMessage, status } = useChat({
+  const dbMessageIdsRef = useRef(new Set(initialMessages.map(m => m.id)))
+
+  const { messages, setMessages, sendMessage, status } = useChat({
     id: sessionId,
     transport: new DefaultChatTransport({
       api: "/api/chat",
-      body: { apiKey, aboutMe },
+      body: { apiKey, aboutMe, userProfile },
     }),
   })
 
-  // Load existing messages from DB
+  // Hydrate useChat with DB messages on mount, then scroll to bottom
   useEffect(() => {
-    const loadMessages = async () => {
-      const { data } = await supabase
-        .from("messages")
-        .select("id, role, content")
-        .eq("session_id", sessionId)
-        .order("created_at", { ascending: true })
-      if (data && data.length > 0) {
-        setDbMessages(data.map(m => ({
-          id: m.id,
-          role: m.role as "user" | "assistant",
-          content: m.content,
-        })))
-      }
+    if (initialMessages.length > 0) {
+      setMessages(initialMessages as Parameters<typeof setMessages>[0])
+      // Wait for React to render the messages before scrolling
+      setTimeout(() => {
+        if (scrollRef.current) {
+          scrollRef.current.scrollTop = scrollRef.current.scrollHeight
+        }
+      }, 100)
     }
-    loadMessages()
-  }, [sessionId, supabase])
-
-  // Combined messages for rendering
-  const messages = [
-    ...dbMessages.map(m => ({
-      id: m.id,
-      role: m.role,
-      parts: [{ type: "text" as const, text: m.content }],
-    })),
-    ...liveMessages,
-  ]
+  }, []) // eslint-disable-line react-hooks/exhaustive-deps
 
   const isStreaming = status === "streaming" || status === "submitted"
 
-  // Greeting card is always shown separately — skip duplicate from DB
+  // Greeting card is always shown separately — skip duplicate from initialMessages
   const displayMessages = messages.length > 0 && messages[0].role === "assistant"
     ? messages.slice(1)
     : messages
 
   // Save assistant response to DB when streaming completes
   useEffect(() => {
-    if (status !== "ready" || liveMessages.length === 0) return
-    const lastMsg = liveMessages[liveMessages.length - 1]
+    if (status !== "ready" || messages.length === 0) return
+    const lastMsg = messages[messages.length - 1]
     if (!lastMsg || lastMsg.role !== "assistant") return
     if (lastMsg.id === lastSavedIdRef.current) return
+    if (dbMessageIdsRef.current.has(lastMsg.id)) return
 
     const content = lastMsg.parts
-      ?.filter(p => p.type === "text")
-      .map(p => (p as { type: "text"; text: string }).text)
+      ?.filter((p: { type: string }) => p.type === "text")
+      .map((p: { type: string; text?: string }) => p.text ?? "")
       .join("") ?? ""
     if (!content) return
 
@@ -133,7 +177,7 @@ function ChatAreaInner({
       if (!error) lastSavedIdRef.current = lastMsg.id
     }
     save()
-  }, [status, liveMessages.length, sessionId, supabase])
+  }, [status, messages.length, sessionId, supabase])
 
   // Auto-scroll
   useEffect(() => {
@@ -174,12 +218,12 @@ function ChatAreaInner({
         const res = await fetch("/api/extract-keywords", {
           method: "POST",
           headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ message: messageText, apiKey }),
+          body: JSON.stringify({ message: messageText, apiKey, sessionId }),
         })
         if (res.ok) {
           const data = await res.json()
           setHeaderKeyword(data.main)
-          setSubKeywords(data.subs ?? [])
+          setSubKeywords(data.subs?.map((s: { label: string }) => s.label) ?? [])
 
           // Update session title in DB
           const supabase = (await import("@clearity/lib")).createClient()
@@ -187,17 +231,6 @@ function ChatAreaInner({
             .from("chat_sessions")
             .update({ title: data.sessionTitle })
             .eq("id", sessionId)
-
-          // Save keywords to DB
-          const keywordsToInsert = [
-            { session_id: sessionId, label: data.main, intensity: "high" as const },
-            ...(data.subs ?? []).map((sub: string) => ({
-              session_id: sessionId,
-              label: sub,
-              intensity: "medium" as const,
-            })),
-          ]
-          await supabase.from("session_keywords").insert(keywordsToInsert)
         }
       } catch {
         // Fallback: use simple extraction
@@ -208,8 +241,8 @@ function ChatAreaInner({
     }
   }
 
-  const handleFinish = async () => {
-    await onFinishSession()
+  const handleFinish = () => {
+    setShowClarifyModal(true)
   }
 
   return (
@@ -327,22 +360,22 @@ function ChatAreaInner({
                   message.role === "user" ? "justify-end" : "justify-start"
                 )}
               >
-                <div
-                  className={cn(
-                    "relative glass-subtle !rounded-3xl px-5 py-3.5 text-sm leading-relaxed text-zinc-800 dark:text-zinc-200 max-w-[70%] w-fit",
-                    message.role === "user"
-                      ? "!bg-white/20 dark:!bg-white/8"
-                      : "border-l-2 border-l-zinc-300/40 dark:border-l-zinc-600/40",
-                  )}
-                >
-                  {message.role === "assistant" && (
-                    <Sparkles className="absolute -top-3.5 -left-3.5 h-4 w-4 text-zinc-300 dark:text-zinc-600" />
-                  )}
-                  {message.parts.map((part, i) => {
-                    if (part.type === "text") return <span key={i} className="whitespace-pre-wrap">{part.text}</span>
-                    return null
-                  })}
-                </div>
+                {message.role === "user" ? (
+                  <div className="relative glass-subtle !rounded-3xl px-5 py-3.5 text-sm leading-relaxed text-zinc-800 dark:text-zinc-200 max-w-[70%] w-fit !bg-white/20 dark:!bg-white/8">
+                    {message.parts.map((part, i) => {
+                      if (part.type === "text") return <span key={i} className="whitespace-pre-wrap">{part.text}</span>
+                      return null
+                    })}
+                  </div>
+                ) : (
+                  <div className="relative text-sm leading-relaxed text-zinc-700 dark:text-zinc-300 max-w-[85%] w-fit px-2 py-1">
+                    <Sparkles className="absolute -top-3 -left-3 h-4 w-4 text-[#a8b8c8] dark:text-[#8899aa]" />
+                    {message.parts.map((part, i) => {
+                      if (part.type === "text") return <span key={i} className="whitespace-pre-wrap">{part.text}</span>
+                      return null
+                    })}
+                  </div>
+                )}
               </div>
             ))}
             {isStreaming && messages[messages.length - 1]?.role !== "assistant" && (
@@ -381,7 +414,7 @@ function ChatAreaInner({
                 placeholder={sessionStatus === "completed" ? "Session ended" : noApiKey ? "Add API key in Settings first" : "Share what's on your mind..."}
                 disabled={sessionStatus === "completed" || noApiKey}
                 rows={1}
-                className="w-full min-h-[48px] max-h-[500px] px-4 py-3 bg-transparent text-sm text-zinc-800 dark:text-zinc-200 placeholder:text-zinc-400 focus:outline-none resize-none overflow-y-auto"
+                className="block w-full max-h-[500px] px-4 py-3 bg-transparent text-sm text-zinc-800 dark:text-zinc-200 placeholder:text-zinc-400 focus:outline-none resize-none overflow-y-auto"
               />
             </div>
             <Button
@@ -398,6 +431,12 @@ function ChatAreaInner({
           </p>
         </div>
       </div>
+      <ClarifyModal
+        open={showClarifyModal}
+        onOpenChange={setShowClarifyModal}
+        sessionId={sessionId}
+        onConfirm={async () => { await onFinishSession(); router.push("/") }}
+      />
     </div>
   )
 }
