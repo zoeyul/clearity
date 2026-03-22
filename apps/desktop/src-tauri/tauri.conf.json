@@ -1,18 +1,18 @@
 {
   "$schema": "https://raw.githubusercontent.com/tauri-apps/tauri/dev/crates/tauri-config-schema/schema.json",
   "productName": "Clearity",
-  "version": "0.0.0",
+  "version": "0.1.0",
   "identifier": "com.clearity.app",
   "build": {
-    "frontendDist": "../../web/out",
+    "frontendDist": "../frontend",
     "devUrl": "http://localhost:3000",
-    "beforeDevCommand": "pnpm --filter @clearity/web dev",
-    "beforeBuildCommand": "pnpm --filter @clearity/web build"
+    "beforeDevCommand": "pnpm --filter @clearity/web dev"
   },
   "app": {
     "windows": [
       {
         "title": "Clearity",
+        "url": "https://clearity-taupe.vercel.app",
         "width": 1200,
         "height": 800
       }
