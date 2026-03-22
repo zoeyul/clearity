@@ -7,6 +7,7 @@ import { createClient } from "@clearity/lib"
 import { MessageSquare, Sparkles } from "lucide-react"
 import { cn } from "@clearity/ui/lib/utils"
 import { LeftSidebar } from "@/components/dashboard/left-sidebar"
+import { MobileSidebar } from "@/components/dashboard/mobile-sidebar"
 import { ClarifyModal } from "@/components/dashboard/clarify-modal"
 
 function formatDate(dateStr: string) {
@@ -77,7 +78,8 @@ export default function HistoryPage() {
         <main className="flex-1 min-w-0 h-full">
           <div className="glass flex flex-col h-full !rounded-3xl p-6 overflow-y-auto">
             {/* Header */}
-            <div className="mb-6">
+            <div className="flex items-center gap-3 mb-6">
+              <MobileSidebar />
               <h1 className="text-xl font-bold text-zinc-800 dark:text-zinc-100">Chat History</h1>
             </div>
 

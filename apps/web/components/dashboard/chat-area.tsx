@@ -8,18 +8,13 @@ import { useRouter } from "next/navigation"
 import { Button } from "@clearity/ui"
 import { createClient } from "@clearity/lib"
 import {
-  Sheet,
-  SheetContent,
-  SheetTrigger,
-} from "@clearity/ui"
-import {
   Send,
   CheckCircle2,
-  Menu,
   Sparkles,
 } from "lucide-react"
 import { cn } from "@clearity/ui/lib/utils"
 import { ClarifyModal } from "@/components/dashboard/clarify-modal"
+import { MobileSidebar } from "@/components/dashboard/mobile-sidebar"
 
 interface ChatAreaProps {
   sessionId: string
@@ -251,15 +246,7 @@ function ChatAreaInner({
       <header className="relative z-10 flex items-center justify-between border-b border-white/15 px-4 py-3 lg:px-6">
         <div className="flex items-center gap-3">
           {/* Mobile menu */}
-          <Sheet>
-            <SheetTrigger asChild>
-              <Button variant="ghost" size="icon" className="glass-interactive lg:hidden !rounded-2xl !border-transparent !bg-transparent text-zinc-700 dark:text-zinc-300">
-                <Menu className="h-5 w-5" />
-                <span className="sr-only">Open navigation</span>
-              </Button>
-            </SheetTrigger>
-            <SheetContent side="left" className="w-[280px] p-5 bg-transparent border-none" />
-          </Sheet>
+          <MobileSidebar activeSessionId={sessionId} />
 
           {/* Dynamic keyword header */}
           {headerKeyword ? (

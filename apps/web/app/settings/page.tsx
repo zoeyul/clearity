@@ -4,6 +4,7 @@ import { useState, useEffect } from "react"
 import { useRouter } from "next/navigation"
 import { Button, Input, Label } from "@clearity/ui"
 import { LeftSidebar } from "@/components/dashboard/left-sidebar"
+import { MobileSidebar } from "@/components/dashboard/mobile-sidebar"
 import { useChatHistory } from "@/hooks/use-chat-history"
 import { createClient } from "@clearity/lib"
 import { Key, Eye, EyeOff, Check, Trash2, UserCircle } from "lucide-react"
@@ -70,8 +71,11 @@ export default function SettingsPage() {
         </div>
 
         <main className="flex-1 min-w-0 h-full">
-          <div className="glass flex flex-col h-full !rounded-3xl p-8">
-            <h1 className="text-xl font-bold text-zinc-800 dark:text-zinc-100 mb-8">Settings</h1>
+          <div className="glass flex flex-col h-full !rounded-3xl p-8 overflow-y-auto">
+            <div className="flex items-center gap-3 mb-8">
+              <MobileSidebar />
+              <h1 className="text-xl font-bold text-zinc-800 dark:text-zinc-100">Settings</h1>
+            </div>
 
             {/* About Me */}
             <div className="glass-subtle !rounded-2xl p-6 mb-6">
@@ -136,7 +140,7 @@ export default function SettingsPage() {
                     value={apiKey}
                     onChange={(e) => setApiKey(e.target.value)}
                     placeholder="AIza..."
-                    className="glass-subtle !rounded-xl h-11 bg-transparent border-0 pr-10 text-zinc-800 dark:text-zinc-200 placeholder:text-zinc-400"
+                    className="glass-subtle !rounded-xl h-11 bg-transparent border-0 pr-10 text-sm text-zinc-800 dark:text-zinc-200 placeholder:text-zinc-400"
                   />
                   <button
                     type="button"

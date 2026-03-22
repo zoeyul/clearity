@@ -10,6 +10,7 @@ import { createClient } from "@clearity/lib";
 import { useDashboard } from "@/hooks/use-dashboard";
 import { useChatHistory } from "@/hooks/use-chat-history";
 import { LeftSidebar } from "@/components/dashboard/left-sidebar";
+import { MobileSidebar } from "@/components/dashboard/mobile-sidebar";
 import {
   forceSimulation,
   forceLink,
@@ -404,13 +405,16 @@ export function ReflectionDashboard() {
           {/* Header */}
           <div className="glass !rounded-3xl px-6 py-4">
             <div className="flex items-center justify-between">
-              <div>
-                <h1 className="text-lg font-bold text-slate-800 dark:text-white">
-                  {dashboard.userName ? `Hi, ${dashboard.userName}.` : "Hi."}
-                </h1>
-                <p className="text-sm font-medium text-slate-400 dark:text-slate-500 mt-0.5">
-                  Clear your mind, find your clarity
-                </p>
+              <div className="flex items-center gap-3">
+                <MobileSidebar />
+                <div>
+                  <h1 className="text-lg font-bold text-slate-800 dark:text-white">
+                    {dashboard.userName ? `Hi, ${dashboard.userName}.` : "Hi."}
+                  </h1>
+                  <p className="text-sm font-medium text-slate-400 dark:text-slate-500 mt-0.5">
+                    Clear your mind, find your clarity
+                  </p>
+                </div>
               </div>
               <div className="text-center">
                 <p className="text-[10px] text-slate-500 uppercase tracking-wide">

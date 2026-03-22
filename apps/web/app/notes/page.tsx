@@ -5,6 +5,7 @@ import { useChatHistory } from "@/hooks/use-chat-history"
 import { createClient } from "@clearity/lib"
 import { StickyNote } from "lucide-react"
 import { LeftSidebar } from "@/components/dashboard/left-sidebar"
+import { MobileSidebar } from "@/components/dashboard/mobile-sidebar"
 
 export default function NotesPage() {
   const router = useRouter()
@@ -44,7 +45,10 @@ export default function NotesPage() {
 
         <main className="flex-1 min-w-0 h-full">
           <div className="glass flex flex-col h-full !rounded-3xl p-8 overflow-y-auto">
-            <h1 className="text-xl font-bold text-zinc-800 dark:text-zinc-100 mb-6">Notes</h1>
+            <div className="flex items-center gap-3 mb-6">
+              <MobileSidebar />
+              <h1 className="text-xl font-bold text-zinc-800 dark:text-zinc-100">Notes</h1>
+            </div>
 
             <div className="flex-1 flex items-center justify-center">
               <div className="text-center">
