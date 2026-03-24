@@ -59,7 +59,7 @@ export function LeftSidebar({
       <div className="relative z-10 px-4 py-4">
         <Button
           onClick={onNewChat}
-          className="glass-solid w-full justify-start gap-2 !rounded-2xl border-0"
+          className="glass-solid w-full justify-center gap-2 !rounded-2xl border-0"
           size="lg"
         >
           <Plus className="h-4 w-4" />

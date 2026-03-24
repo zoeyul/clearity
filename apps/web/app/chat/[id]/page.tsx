@@ -1,4 +1,4 @@
-import { ClearityDashboard } from "@/components/dashboard/clearity-dashboard"
+import { ClearityDashboard } from "@/pages/chat"
 
 export const dynamic = "force-dynamic"
 

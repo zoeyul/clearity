@@ -2,10 +2,10 @@
 
 import { useEffect } from "react"
 import { useRouter } from "next/navigation"
-import { LeftSidebar } from "@/components/dashboard/left-sidebar"
-import { ChatArea } from "@/components/dashboard/chat-area"
-import { useSession } from "@/hooks/use-session"
-import { useChatHistory } from "@/hooks/use-chat-history"
+import { LeftSidebar } from "@/shared/ui/left-sidebar"
+import { ChatArea } from "@/pages/chat/ui/chat-area"
+import { useSession } from "@/shared/lib/use-session"
+import { useChatHistory } from "@/shared/lib/use-chat-history"
 import { createClient } from "@clearity/lib"
 
 interface ClearityDashboardProps {

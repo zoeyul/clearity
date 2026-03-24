@@ -4,13 +4,14 @@ import { useEffect, useState, useMemo, useRef } from "react";
 import { useRouter } from "next/navigation";
 import { Button, Checkbox } from "@clearity/ui";
 import { Zap, GitBranch } from "lucide-react";
-import { LoadingScreen } from "@/components/loading-screen";
+import { LoadingScreen } from "@/shared/ui/loading-screen";
 import { cn } from "@clearity/ui/lib/utils";
 import { createClient } from "@clearity/lib";
-import { useDashboard } from "@/hooks/use-dashboard";
-import { useChatHistory } from "@/hooks/use-chat-history";
-import { LeftSidebar } from "@/components/dashboard/left-sidebar";
-import { MobileSidebar } from "@/components/dashboard/mobile-sidebar";
+import { useDashboard } from "@/shared/lib/use-dashboard";
+import { useChatHistory } from "@/shared/lib/use-chat-history";
+import { useNewSession } from "@/shared/lib/use-new-session";
+import { LeftSidebar } from "@/shared/ui/left-sidebar";
+import { MobileSidebar } from "@/shared/ui/mobile-sidebar";
 import {
   forceSimulation,
   forceLink,
@@ -27,6 +28,7 @@ export function ReflectionDashboard() {
   const supabase = createClient();
   const dashboard = useDashboard();
   const chatHistory = useChatHistory();
+  const handleNewSession = useNewSession();
   const [inputValue, setInputValue] = useState("");
   const [isExtracting, setIsExtracting] = useState(false);
   const [expandedMain, setExpandedMain] = useState<string | null>(null);
@@ -404,7 +406,7 @@ export function ReflectionDashboard() {
             sessions={chatHistory.sessions}
             activeSessionId={null}
             onSelectSession={handleSelectSession}
-            onNewChat={() => {}}
+            onNewChat={handleNewSession}
             isLoading={chatHistory.isLoading}
           />
         </div>

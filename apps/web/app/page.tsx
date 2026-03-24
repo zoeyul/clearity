@@ -1,4 +1,4 @@
-import { ReflectionDashboard } from "@/components/dashboard/reflection-dashboard"
+import { ReflectionDashboard } from "@/pages/home"
 
 export const dynamic = "force-dynamic"
 

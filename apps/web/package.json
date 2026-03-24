@@ -35,6 +35,7 @@
     "@types/react": "^18.3.0",
     "@types/react-dom": "^18.3.0",
     "postcss": "^8.5",
+    "steiger": "^0.5.11",
     "tailwindcss": "^4.2.0",
     "tw-animate-css": "1.3.3",
     "typescript": "5.7.3"

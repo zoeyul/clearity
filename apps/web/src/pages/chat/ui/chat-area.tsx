@@ -13,8 +13,8 @@ import {
   Sparkles,
 } from "lucide-react"
 import { cn } from "@clearity/ui/lib/utils"
-import { ClarifyModal } from "@/components/dashboard/clarify-modal"
-import { MobileSidebar } from "@/components/dashboard/mobile-sidebar"
+import { ClarifyModal } from "@/shared/ui/clarify-modal"
+import { MobileSidebar } from "@/shared/ui/mobile-sidebar"
 
 interface ChatAreaProps {
   sessionId: string
