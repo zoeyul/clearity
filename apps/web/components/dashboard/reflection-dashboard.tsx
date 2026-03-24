@@ -42,6 +42,7 @@ export function ReflectionDashboard() {
   >([]);
   const [hasApiKey, setHasApiKey] = useState(true);
   const [isNavigating, setIsNavigating] = useState(false);
+  const [errorMessage, setErrorMessage] = useState<string | null>(null);
   const [glowingIds, setGlowingIds] = useState<Set<string>>(new Set());
   const [similarities, setSimilarities] = useState<
     { sourceId: string; targetId: string; score: number }[]
@@ -271,6 +272,12 @@ export function ReflectionDashboard() {
         body: JSON.stringify({ message: text, apiKey }),
       });
 
+      if (res.status === 429) {
+        setErrorMessage("API rate limit reached. Please wait a moment and try again.");
+        setTimeout(() => setErrorMessage(null), 5000);
+        return;
+      }
+
       if (res.ok) {
         const data = await res.json();
 
@@ -368,7 +375,9 @@ export function ReflectionDashboard() {
   }));
 
   // Check for active session
-  const activeSession = chatHistory.sessions.find((s) => s.status === "active");
+  const activeSession = chatHistory.sessions.find(
+    (s) => s.status === "active" && s.title && s.title !== "New Chat"
+  );
   const hasActiveSession = !!activeSession;
 
   if (dashboard.isLoading || isNavigating) {
@@ -432,8 +441,16 @@ export function ReflectionDashboard() {
             className="flex-1 glass !rounded-3xl p-6 relative overflow-hidden"
             style={{ perspective: "600px", perspectiveOrigin: "50% 45%" }}
           >
-            {/* Ambient Particles — visible when canvas is empty */}
-            {canvasKeywords.length === 0 && (
+            {/* Central glow — always visible */}
+            <div className="absolute inset-0 flex items-center justify-center pointer-events-none z-[1]">
+              <div
+                className="w-48 h-48 rounded-full bg-sky-300/15 blur-[80px] animate-pulse"
+                style={{ animationDuration: "4s" }}
+              />
+            </div>
+
+            {/* Ambient Particles — visible when canvas is empty or extracting */}
+            {(canvasKeywords.length === 0 || isExtracting) && (
               <div className="absolute inset-0 flex items-center justify-center">
                 {/* Particle field */}
                 {particles.map((p, i) => (
@@ -456,24 +473,21 @@ export function ReflectionDashboard() {
                     />
                   </svg>
                 ))}
-                {/* Central glow */}
-                <div
-                  className="w-48 h-48 rounded-full bg-sky-300/15 blur-[80px] animate-pulse"
-                  style={{ animationDuration: "4s" }}
-                />
-                {/* Empty state text */}
-                <p
-                  className={cn(
-                    "absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 text-xs tracking-wide transition-all",
-                    isExtracting
-                      ? "text-zinc-500 animate-bounce"
-                      : "text-zinc-400/60",
-                  )}
-                >
-                  {isExtracting
-                    ? "Extracting your thoughts..."
-                    : "Your thoughts will appear here"}
-                </p>
+                {/* Empty state text — only when no keywords */}
+                {canvasKeywords.length === 0 && (
+                  <p
+                    className={cn(
+                      "absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 text-xs tracking-wide transition-all",
+                      isExtracting
+                        ? "text-zinc-500 animate-bounce"
+                        : "text-zinc-400/60",
+                    )}
+                  >
+                    {isExtracting
+                      ? "Extracting your thoughts..."
+                      : "Your thoughts will appear here"}
+                  </p>
+                )}
               </div>
             )}
 
@@ -494,7 +508,7 @@ export function ReflectionDashboard() {
               }}
             >
               {similarities
-                .filter((s) => s.score >= 0.65)
+                .filter((s) => Math.round(s.score * 100) / 100 >= 0.65)
                 .map((sim, i) => {
                   const sourcePos = nodePositions.get(sim.sourceId);
                   const targetPos = nodePositions.get(sim.targetId);
@@ -681,7 +695,11 @@ export function ReflectionDashboard() {
                     />
                   </Button>
                 </div>
-                {!hasApiKey ? (
+                {errorMessage ? (
+                  <p className="text-center text-[11px] text-red-500 mt-2">
+                    {errorMessage}
+                  </p>
+                ) : !hasApiKey ? (
                   <p className="text-center text-[11px] text-amber-500 mt-2">
                     API key required — go to Settings to add your Gemini key
                   </p>

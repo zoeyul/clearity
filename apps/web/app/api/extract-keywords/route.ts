@@ -36,25 +36,30 @@ export async function POST(req: Request) {
     const { object } = await generateObject({
       model: google("gemini-2.5-flash"),
       maxRetries: 0,
+      temperature: 0.2,
       schema: ExtractionSchema,
-      prompt: `Analyze this user message and extract the core topics they're thinking about.
+      prompt: `You are analyzing someone's inner thoughts. Identify the thought that keeps occupying their mind — the thing they can't stop thinking about.
 
 Rules:
-- "main" = the single most important topic (the real concern behind the words)
-- "subs" = 1-3 derivative or related concerns branching from the main topic
-- "sessionTitle" = a short, clean title for this conversation (like a journal entry title)
+- "main" = the recurring thought in 2-5 words. It should feel like an inner voice, not a textbook label.
+  - NEVER use clinical/generic terms like "stress", "anxiety", "worries" (or their equivalents in any language)
+  - Ask yourself: "Would this person recognize this phrase and say 'yes, that's exactly what's been stuck in my head'?"
+  - Example: "자전거 타다가 회사 앉으니 답답해" → "사무실에 갇힌 느낌" (NOT "업무 스트레스")
+  - Example: "도예 배우고 싶은데 돈이 걱정돼" → "돈 때문에 꿈 못 쫓는 답답함" (NOT "career anxiety")
+- "subs" = 1-3 related thoughts branching from the main one, same style — raw and personal like the user's actual inner voice
+- "sessionTitle" = a concise title for this thought (2-5 words)
+- Consider the ENTIRE message equally — do NOT give extra weight to the last sentence. The main thought is often expressed throughout, not just at the end.
 - Use the same language as the user's message
-- Extract meaning, not just words — "I'm scared about changing jobs" → main: "Career transition", not "scared"
 
 User message: "${message}"`,
     })
 
-    // 2. Generate embedding from original message (not keyword) for better discrimination
+    // 2. Generate embedding (keyword + sentence combined)
     let mainEmbedding: number[] | null = null
     try {
       const { embedding } = await embed({
         model: google.textEmbeddingModel("gemini-embedding-001"),
-        value: message,
+        value: `${object.main} — ${message}`,
       })
       mainEmbedding = embedding
     } catch {
@@ -68,18 +73,23 @@ User message: "${message}"`,
     if (mainEmbedding) {
       const { data: existingKeywords } = await supabase
         .from("session_keywords")
-        .select("id, label, embedding, hit_count")
+        .select("id, label, embedding_v2, hit_count")
         .eq("user_id", user.id)
         .eq("hierarchy", "main")
         .in("status", ["fragment", "clustered", "core"])
 
       if (existingKeywords) {
         for (const existing of existingKeywords) {
-          if (!existing.embedding) continue
-          const score = cosineSimilarity(mainEmbedding, existing.embedding as number[])
+          // Exact keyword match → always merge
+          if (existing.label === object.main) {
+            matchedKeywordId = existing.id
+          }
+
+          if (!existing.embedding_v2) continue
+          const score = cosineSimilarity(mainEmbedding, existing.embedding_v2 as number[])
           similarities.push({ id: existing.id, score })
 
-          if (score >= SIMILARITY_THRESHOLD) {
+          if (!matchedKeywordId && score >= SIMILARITY_THRESHOLD) {
             matchedKeywordId = existing.id
           }
         }
@@ -115,7 +125,6 @@ User message: "${message}"`,
       await supabase.from("user_inputs").insert({
         user_id: user.id,
         message,
-        embedding: mainEmbedding,
         extracted_main: object.main,
         extracted_subs: object.subs,
         matched_keyword_id: matchedKeywordId,
@@ -139,7 +148,7 @@ User message: "${message}"`,
         status: "fragment",
         user_id: user.id,
         hit_count: 1,
-        embedding: mainEmbedding,
+        embedding_v2: mainEmbedding,
         ...(sessionId ? { session_id: sessionId } : {}),
       })
       .select("id")

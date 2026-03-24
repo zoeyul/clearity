@@ -5,7 +5,8 @@ import {
   Plus,
   Sparkles,
   Clock,
-  StickyNote,
+  ListChecks,
+  LayoutDashboard,
   Settings,
   ChevronRight,
   LogOut,
@@ -70,8 +71,9 @@ export function LeftSidebar({
       <div className="relative z-10 flex-1 px-4 py-4">
         <div className="flex flex-col gap-1">
           {[
+            { icon: LayoutDashboard, label: "Dashboard", href: "/" },
             { icon: Clock, label: "Chat History", href: "/history" },
-            { icon: StickyNote, label: "Notes", href: "/notes" },
+            { icon: ListChecks, label: "Actions", href: "/actions" },
           ].map((item) => (
             <button
               key={item.label}

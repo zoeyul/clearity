@@ -41,6 +41,7 @@ export default function HistoryPage() {
   const chatHistory = useChatHistory()
   const supabase = createClient()
   const [clarifySessionId, setClarifySessionId] = useState<string | null>(null)
+  const [filter, setFilter] = useState<"all" | "active" | "completed">("all")
 
   const handleNewSession = async () => {
     const { data: { user } } = await supabase.auth.getUser()
@@ -78,9 +79,27 @@ export default function HistoryPage() {
         <main className="flex-1 min-w-0 h-full">
           <div className="glass flex flex-col h-full !rounded-3xl p-6 overflow-y-auto">
             {/* Header */}
-            <div className="flex items-center gap-3 mb-6">
-              <MobileSidebar />
-              <h1 className="text-xl font-bold text-zinc-800 dark:text-zinc-100">Chat History</h1>
+            <div className="flex items-center justify-between mb-6">
+              <div className="flex items-center gap-3">
+                <MobileSidebar />
+                <h1 className="text-xl font-bold text-zinc-800 dark:text-zinc-100">Chat History</h1>
+              </div>
+              <div className="flex gap-1">
+                {(["all", "active", "completed"] as const).map((f) => (
+                  <button
+                    key={f}
+                    onClick={() => setFilter(f)}
+                    className={cn(
+                      "text-[11px] px-3 py-1.5 rounded-xl transition-all",
+                      filter === f
+                        ? "glass-solid text-white"
+                        : "text-zinc-500 hover:text-zinc-700 dark:hover:text-zinc-300"
+                    )}
+                  >
+                    {f === "all" ? "All" : f === "active" ? "Active" : "Completed"}
+                  </button>
+                ))}
+              </div>
             </div>
 
             {/* Session List */}
@@ -94,7 +113,7 @@ export default function HistoryPage() {
               </div>
             ) : (
               <div className="flex flex-col gap-3">
-                {chatHistory.sessions.map((session) => (
+                {chatHistory.sessions.filter(s => filter === "all" || s.status === filter).map((session) => (
                   <div
                     key={session.id}
                     onClick={() => session.status === "completed" ? setClarifySessionId(session.id) : handleSelectSession(session.id)}

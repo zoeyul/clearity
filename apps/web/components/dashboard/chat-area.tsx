@@ -114,6 +114,7 @@ function ChatAreaInner({
   const [headerKeyword, setHeaderKeyword] = useState<string | null>(loadedKeyword.main ?? keyword ?? null)
   const [subKeywords, setSubKeywords] = useState<string[]>(loadedKeyword.subs)
   const [showClarifyModal, setShowClarifyModal] = useState(false)
+  const [errorMessage, setErrorMessage] = useState<string | null>(null)
   const scrollRef = useRef<HTMLDivElement>(null)
   const supabaseRef = useRef(createClient())
   const supabase = supabaseRef.current
@@ -122,7 +123,7 @@ function ChatAreaInner({
 
   const dbMessageIdsRef = useRef(new Set(initialMessages.map(m => m.id)))
 
-  const { messages, setMessages, sendMessage, status } = useChat({
+  const { messages, setMessages, sendMessage, status, error } = useChat({
     id: sessionId,
     transport: new DefaultChatTransport({
       api: "/api/chat",
@@ -144,6 +145,14 @@ function ChatAreaInner({
   }, []) // eslint-disable-line react-hooks/exhaustive-deps
 
   const isStreaming = status === "streaming" || status === "submitted"
+
+  // Show rate limit error
+  useEffect(() => {
+    if (error?.message?.includes("429") || error?.message?.includes("rate") || error?.message?.includes("quota")) {
+      setErrorMessage("API rate limit reached. Please wait a moment and try again.")
+      setTimeout(() => setErrorMessage(null), 5000)
+    }
+  }, [error])
 
   // Greeting card is always shown separately — skip duplicate from initialMessages
   const displayMessages = messages.length > 0 && messages[0].role === "assistant"
@@ -414,7 +423,11 @@ function ChatAreaInner({
             </Button>
           </div>
           <p className="text-xs text-zinc-500 dark:text-zinc-400">
-            Your conversations are private and secure
+            {errorMessage ? (
+              <span className="text-red-500">{errorMessage}</span>
+            ) : (
+              "Your conversations are private and secure"
+            )}
           </p>
         </div>
       </div>
