@@ -6,6 +6,7 @@ import {
   Sparkles,
   Clock,
   ListChecks,
+  StickyNote,
   LayoutDashboard,
   Settings,
   ChevronRight,
@@ -59,7 +60,7 @@ export function LeftSidebar({
       <div className="relative z-10 px-4 py-4">
         <Button
           onClick={onNewChat}
-          className="glass-solid w-full justify-center gap-2 !rounded-2xl border-0"
+          className="glass-solid w-full justify-start gap-2 !rounded-2xl border-0"
           size="lg"
         >
           <Plus className="h-4 w-4" />
@@ -73,6 +74,7 @@ export function LeftSidebar({
           {[
             { icon: LayoutDashboard, label: "Dashboard", href: "/" },
             { icon: Clock, label: "Chat History", href: "/history" },
+            { icon: StickyNote, label: "Notes", href: "/notes" },
             { icon: ListChecks, label: "Actions", href: "/actions" },
           ].map((item) => (
             <button

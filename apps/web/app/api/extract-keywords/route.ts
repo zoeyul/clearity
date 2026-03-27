@@ -36,7 +36,6 @@ export async function POST(req: Request) {
     const { object } = await generateObject({
       model: google("gemini-2.5-flash"),
       maxRetries: 0,
-      temperature: 0.2,
       schema: ExtractionSchema,
       prompt: `You are analyzing someone's inner thoughts. Identify the thought that keeps occupying their mind — the thing they can't stop thinking about.
 
@@ -44,8 +43,6 @@ Rules:
 - "main" = the recurring thought in 2-5 words. It should feel like an inner voice, not a textbook label.
   - NEVER use clinical/generic terms like "stress", "anxiety", "worries" (or their equivalents in any language)
   - Ask yourself: "Would this person recognize this phrase and say 'yes, that's exactly what's been stuck in my head'?"
-  - Example: "자전거 타다가 회사 앉으니 답답해" → "사무실에 갇힌 느낌" (NOT "업무 스트레스")
-  - Example: "도예 배우고 싶은데 돈이 걱정돼" → "돈 때문에 꿈 못 쫓는 답답함" (NOT "career anxiety")
 - "subs" = 1-3 related thoughts branching from the main one, same style — raw and personal like the user's actual inner voice
 - "sessionTitle" = a concise title for this thought (2-5 words)
 - Consider the ENTIRE message equally — do NOT give extra weight to the last sentence. The main thought is often expressed throughout, not just at the end.

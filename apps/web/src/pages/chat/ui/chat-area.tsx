@@ -11,6 +11,7 @@ import {
   Send,
   CheckCircle2,
   Sparkles,
+  StickyNote,
 } from "lucide-react"
 import { cn } from "@clearity/ui/lib/utils"
 import { ClarifyModal } from "@/shared/ui/clarify-modal"
@@ -22,6 +23,9 @@ interface ChatAreaProps {
   onFinishSession: () => Promise<unknown>
   isLoading: boolean
   keyword?: string
+  context?: string
+  onToggleNotes?: () => void
+  showNotes?: boolean
 }
 
 export function ChatArea(props: ChatAreaProps) {
@@ -103,6 +107,9 @@ function ChatAreaInner({
   onFinishSession,
   isLoading,
   keyword,
+  context,
+  onToggleNotes,
+  showNotes,
   apiKey,
   aboutMe,
   userProfile,
@@ -199,7 +206,7 @@ function ChatAreaInner({
     // Save greeting + first user message, or just user message for subsequent
     if (isFirstMessage) {
       const greeting = keyword
-        ? `I see you're focusing on '${keyword}'. Want to dig deeper, or is there something specific about it that's been stuck?`
+        ? `You said: "${(context ?? '').length > 100 ? (context ?? '').slice(0, 100) + '...' : context ?? keyword}" — this led to '${keyword}'. What part of this is weighing on you the most?`
         : "What's been on your mind lately? No need to organize it — just start wherever feels right."
       const { error } = await supabase.from("messages").insert([
         { session_id: sessionId, role: "assistant", content: greeting },
@@ -289,25 +296,40 @@ function ChatAreaInner({
           )}
         </div>
 
-        {/* Clarify button — appears with keyword */}
-        {headerKeyword && (
-          <motion.div
-            initial={{ opacity: 0, scale: 0.95 }}
-            animate={{ opacity: 1, scale: 1 }}
-            transition={{ duration: 0.4, delay: 0.2, ease: "easeOut" }}
-          >
+        <div className="flex items-center gap-2">
+          {/* Note toggle */}
+          {onToggleNotes && (
             <Button
-              onClick={handleFinish}
-              disabled={sessionStatus === "completed"}
+              onClick={onToggleNotes}
               variant="outline"
               size="sm"
               className="glass-subtle gap-2 !rounded-xl text-zinc-600 dark:text-zinc-300 transition-all hover:-translate-y-0.5 hover:shadow-lg active:translate-y-0 active:scale-[0.98]"
             >
-              <CheckCircle2 className="h-4 w-4" />
-              Clarify
+              <StickyNote className="h-4 w-4" />
+              Note
             </Button>
-          </motion.div>
-        )}
+          )}
+
+          {/* Clarify button — appears with keyword */}
+          {headerKeyword && (
+            <motion.div
+              initial={{ opacity: 0, scale: 0.95 }}
+              animate={{ opacity: 1, scale: 1 }}
+              transition={{ duration: 0.4, delay: 0.2, ease: "easeOut" }}
+            >
+              <Button
+                onClick={handleFinish}
+                disabled={sessionStatus === "completed"}
+                variant="outline"
+                size="sm"
+                className="glass-subtle gap-2 !rounded-xl text-zinc-600 dark:text-zinc-300 transition-all hover:-translate-y-0.5 hover:shadow-lg active:translate-y-0 active:scale-[0.98]"
+              >
+                <CheckCircle2 className="h-4 w-4" />
+                Clarify
+              </Button>
+            </motion.div>
+          )}
+        </div>
       </header>
 
       {/* Messages */}
@@ -336,11 +358,9 @@ function ChatAreaInner({
                 <Sparkles className="absolute -top-3.5 -left-3.5 h-4 w-4 text-zinc-300 dark:text-zinc-600" />
                 {keyword ? (
                   <>
-                    I see you&apos;re focusing on &apos;
-                    <span className="font-semibold">
-                      {keyword}
-                    </span>
-                    &apos;. Want to dig deeper, or is there something specific about it that&apos;s been stuck?
+                    You said: &ldquo;{(context ?? keyword).length > 100 ? (context ?? keyword).slice(0, 100) + '...' : (context ?? keyword)}&rdquo; — this led to &apos;
+                    <span className="font-semibold">{keyword}</span>
+                    &apos;. What part of this is weighing on you the most?
                   </>
                 ) : (
                   "What's been on your mind lately? No need to organize it — just start wherever feels right."

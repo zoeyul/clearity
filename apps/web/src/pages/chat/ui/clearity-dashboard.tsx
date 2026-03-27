@@ -1,9 +1,10 @@
 "use client"
 
-import { useEffect } from "react"
+import { useEffect, useState, useCallback, useRef } from "react"
 import { useRouter } from "next/navigation"
 import { LeftSidebar } from "@/shared/ui/left-sidebar"
 import { ChatArea } from "@/pages/chat/ui/chat-area"
+import { NotePanel } from "@/pages/chat/ui/note-panel"
 import { useSession } from "@/shared/lib/use-session"
 import { useChatHistory } from "@/shared/lib/use-chat-history"
 import { createClient } from "@clearity/lib"
@@ -11,13 +12,17 @@ import { createClient } from "@clearity/lib"
 interface ClearityDashboardProps {
   sessionId: string
   keyword?: string
+  context?: string
 }
 
-export function ClearityDashboard({ sessionId, keyword }: ClearityDashboardProps) {
+export function ClearityDashboard({ sessionId, keyword, context }: ClearityDashboardProps) {
   const router = useRouter()
   const supabase = createClient()
   const chatHistory = useChatHistory()
   const session = useSession(sessionId)
+  const [showNotes, setShowNotes] = useState(true)
+  const [noteWidth, setNoteWidth] = useState(320)
+  const isResizingRef = useRef(false)
 
   const handleNewChat = async () => {
     const { data: { user } } = await supabase.auth.getUser()
@@ -36,6 +41,29 @@ export function ClearityDashboard({ sessionId, keyword }: ClearityDashboardProps
   }
 
   const handleSelectSession = (id: string) => router.push(`/chat/${id}`)
+
+  const handleResizeStart = useCallback((e: React.MouseEvent) => {
+    e.preventDefault()
+    isResizingRef.current = true
+
+    const startX = e.clientX
+    const startWidth = noteWidth
+
+    const onMouseMove = (e: MouseEvent) => {
+      if (!isResizingRef.current) return
+      const newWidth = Math.max(240, Math.min(600, startWidth - (e.clientX - startX)))
+      setNoteWidth(newWidth)
+    }
+
+    const onMouseUp = () => {
+      isResizingRef.current = false
+      document.removeEventListener("mousemove", onMouseMove)
+      document.removeEventListener("mouseup", onMouseUp)
+    }
+
+    document.addEventListener("mousemove", onMouseMove)
+    document.addEventListener("mouseup", onMouseUp)
+  }, [noteWidth])
 
   // Clean up empty sessions on page leave (not on React Strict Mode remount)
   useEffect(() => {
@@ -77,8 +105,27 @@ export function ClearityDashboard({ sessionId, keyword }: ClearityDashboardProps
             onFinishSession={session.finishSession}
             isLoading={session.isLoading}
             keyword={keyword}
+            context={context}
+            onToggleNotes={() => setShowNotes(!showNotes)}
+            showNotes={showNotes}
           />
         </main>
+
+        {/* Note Panel with resize handle */}
+        {showNotes && (
+          <div className="hidden lg:flex h-full shrink-0" style={{ width: noteWidth }}>
+            {/* Resize handle */}
+            <div
+              onMouseDown={handleResizeStart}
+              className="w-2 cursor-col-resize flex items-center justify-center group"
+            >
+              <div className="w-[3px] h-8 rounded-full bg-zinc-300/60 dark:bg-zinc-600/40 group-hover:bg-zinc-400 dark:group-hover:bg-zinc-500 group-hover:h-12 transition-all" />
+            </div>
+            <div className="flex-1 min-w-0 h-full">
+              <NotePanel sessionId={sessionId} onClose={() => setShowNotes(false)} />
+            </div>
+          </div>
+        )}
       </div>
     </div>
   )

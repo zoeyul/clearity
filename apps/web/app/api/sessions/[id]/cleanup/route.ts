@@ -14,9 +14,17 @@ export async function POST(
     .select("id", { count: "exact", head: true })
     .eq("session_id", sessionId)
 
-  // Only delete if no messages
+  // Only delete if no messages AND title is "New Chat" (not from keyword Deep Dive)
   if (count === 0) {
-    await supabase.from("chat_sessions").delete().eq("id", sessionId)
+    const { data: session } = await supabase
+      .from("chat_sessions")
+      .select("title")
+      .eq("id", sessionId)
+      .single()
+
+    if (session?.title === "New Chat") {
+      await supabase.from("chat_sessions").delete().eq("id", sessionId)
+    }
   }
 
   return NextResponse.json({ ok: true })

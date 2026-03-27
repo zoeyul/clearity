@@ -12,6 +12,7 @@ import { useChatHistory } from "@/shared/lib/use-chat-history";
 import { useNewSession } from "@/shared/lib/use-new-session";
 import { LeftSidebar } from "@/shared/ui/left-sidebar";
 import { MobileSidebar } from "@/shared/ui/mobile-sidebar";
+import { ClarifyModal } from "@/shared/ui/clarify-modal";
 import {
   forceSimulation,
   forceLink,
@@ -339,6 +340,8 @@ export function ReflectionDashboard() {
     }
   };
 
+  const [clarifySessionId, setClarifySessionId] = useState<string | null>(null);
+
   const handleKeywordClick = async (keywordText: string) => {
     setIsNavigating(true);
 
@@ -350,6 +353,29 @@ export function ReflectionDashboard() {
       return;
     }
 
+    // Check for existing session with this keyword
+    const { data: existingSession } = await supabase
+      .from("chat_sessions")
+      .select("id, status")
+      .eq("user_id", user.id)
+      .eq("title", keywordText)
+      .order("created_at", { ascending: false })
+      .limit(1)
+      .single();
+
+    if (existingSession) {
+      if (existingSession.status === "completed") {
+        // Show summary modal
+        setIsNavigating(false);
+        setClarifySessionId(existingSession.id);
+        return;
+      }
+      // Resume existing active session
+      router.push(`/chat/${existingSession.id}?keyword=${encodeURIComponent(keywordText)}`);
+      return;
+    }
+
+    // Create new session
     const id = crypto.randomUUID();
     const { error } = await supabase
       .from("chat_sessions")
@@ -361,10 +387,22 @@ export function ReflectionDashboard() {
       return;
     }
 
+    // Look up original message for this keyword
+    const { data: inputData } = await supabase
+      .from("user_inputs")
+      .select("message")
+      .eq("extracted_main", keywordText)
+      .order("created_at", { ascending: false })
+      .limit(1)
+      .single();
+
+    const params = new URLSearchParams({ keyword: keywordText });
+    if (inputData?.message) {
+      params.set("context", inputData.message);
+    }
+
     chatHistory.refetch();
-    router.push(
-      `/chat/${id}?keyword=${encodeURIComponent(keywordText)}`,
-    );
+    router.push(`/chat/${id}?${params.toString()}`);
   };
 
   const handleSelectSession = (sessionId: string) =>
@@ -794,6 +832,15 @@ export function ReflectionDashboard() {
           </div>
         </aside>
       </div>
+      {clarifySessionId && (
+        <ClarifyModal
+          open={!!clarifySessionId}
+          onOpenChange={(open) => { if (!open) setClarifySessionId(null) }}
+          sessionId={clarifySessionId}
+          onConfirm={async () => {}}
+          onViewChat={() => { router.push(`/chat/${clarifySessionId}`); setClarifySessionId(null) }}
+        />
+      )}
     </div>
   );
 }
