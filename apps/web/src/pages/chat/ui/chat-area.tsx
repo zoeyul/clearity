@@ -138,16 +138,30 @@ function ChatAreaInner({
     }),
   })
 
-  // Hydrate useChat with DB messages on mount, then scroll to bottom
+  // Hydrate useChat with DB messages on mount, or save greeting for fresh sessions
   useEffect(() => {
     if (initialMessages.length > 0) {
       setMessages(initialMessages as Parameters<typeof setMessages>[0])
-      // Wait for React to render the messages before scrolling
       setTimeout(() => {
         if (scrollRef.current) {
           scrollRef.current.scrollTop = scrollRef.current.scrollHeight
         }
       }, 100)
+    } else if (headerKeyword || !noApiKey) {
+      // Fresh session — save greeting to DB immediately
+      const kw = headerKeyword
+      const greeting = kw
+        ? `You said: "${(context ?? '').length > 100 ? (context ?? '').slice(0, 100) + '...' : context ?? kw}" — this led to '${kw}'. What part of this is weighing on you the most?`
+        : "What's been on your mind lately? No need to organize it — just start wherever feels right."
+
+      const saveGreeting = async () => {
+        await supabase.from("messages").insert({
+          session_id: sessionId,
+          role: "assistant",
+          content: greeting,
+        })
+      }
+      saveGreeting()
     }
   }, []) // eslint-disable-line react-hooks/exhaustive-deps
 
@@ -161,8 +175,10 @@ function ChatAreaInner({
     }
   }, [error])
 
-  // Greeting card is always shown separately — skip duplicate from initialMessages
-  const displayMessages = messages.length > 0 && messages[0].role === "assistant"
+  // If messages loaded from DB, show all (greeting is already in DB messages)
+  // If fresh session, skip first assistant message (shown as greeting card)
+  const hasDbMessages = initialMessages.length > 0
+  const displayMessages = !hasDbMessages && messages.length > 0 && messages[0].role === "assistant"
     ? messages.slice(1)
     : messages
 
@@ -203,22 +219,11 @@ function ChatAreaInner({
     const messageText = inputValue
     const isFirstMessage = messages.length === 0
 
-    // Save greeting + first user message, or just user message for subsequent
-    if (isFirstMessage) {
-      const greeting = keyword
-        ? `You said: "${(context ?? '').length > 100 ? (context ?? '').slice(0, 100) + '...' : context ?? keyword}" — this led to '${keyword}'. What part of this is weighing on you the most?`
-        : "What's been on your mind lately? No need to organize it — just start wherever feels right."
-      const { error } = await supabase.from("messages").insert([
-        { session_id: sessionId, role: "assistant", content: greeting },
-        { session_id: sessionId, role: "user", content: messageText },
-      ])
-      console.log("[firstMessage]", { error })
-    } else {
-      const { error } = await supabase
-        .from("messages")
-        .insert({ session_id: sessionId, role: "user", content: messageText })
-      console.log("[userMessage]", { error })
-    }
+    // Save user message (greeting already saved on mount)
+    const { error } = await supabase
+      .from("messages")
+      .insert({ session_id: sessionId, role: "user", content: messageText })
+    console.log("[userMessage]", { error })
 
     sendMessage({ text: messageText })
     setInputValue("")
@@ -347,8 +352,8 @@ function ChatAreaInner({
           </div>
         ) : (
           <div className="flex flex-col gap-6 py-6">
-            {/* Greeting card — always visible */}
-            <div className="flex justify-start px-2">
+            {/* Greeting card — only for fresh sessions */}
+            {!hasDbMessages && <div className="flex justify-start px-2">
               <motion.div
                 initial={{ opacity: 0, y: 10 }}
                 animate={{ opacity: 1, y: 0 }}
@@ -366,7 +371,7 @@ function ChatAreaInner({
                   "What's been on your mind lately? No need to organize it — just start wherever feels right."
                 )}
               </motion.div>
-            </div>
+            </div>}
 
             {displayMessages.map((message) => (
               <div

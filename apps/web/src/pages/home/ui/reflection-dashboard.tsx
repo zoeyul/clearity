@@ -370,8 +370,8 @@ export function ReflectionDashboard() {
         setClarifySessionId(existingSession.id);
         return;
       }
-      // Resume existing active session
-      router.push(`/chat/${existingSession.id}?keyword=${encodeURIComponent(keywordText)}`);
+      // Resume existing active session — DB messages already have greeting
+      router.push(`/chat/${existingSession.id}`);
       return;
     }
 
@@ -407,12 +407,6 @@ export function ReflectionDashboard() {
 
   const handleSelectSession = (sessionId: string) =>
     router.push(`/chat/${sessionId}`);
-
-  // Build dynamic thought distribution from DB keywords
-  const thoughtDistribution = dashboard.topKeywords.map((kw, i) => ({
-    domain: kw,
-    percentage: Math.max(10, 40 - i * 8),
-  }));
 
   // Check for active session
   const activeSession = chatHistory.sessions.find(
@@ -755,39 +749,55 @@ export function ReflectionDashboard() {
 
         {/* ========== RIGHT: Analysis ========== */}
         <aside className="hidden w-[280px] shrink-0 xl:flex flex-col gap-4">
-          {/* Thought Distribution */}
+          {/* Thinking Tendencies */}
           <div className="glass !rounded-3xl p-5">
             <div className="flex items-center gap-2 mb-4">
               <div className="h-4 w-4 rounded-full border-2 border-indigo-400" />
               <h3 className="text-sm font-semibold text-slate-800 dark:text-white">
-                Thought Distribution
+                Thinking Tendencies
               </h3>
             </div>
 
-            <p className="text-xs text-slate-500 mb-4">
-              Where your mind has been this week
-            </p>
-
-            <div className="space-y-3">
-              {thoughtDistribution.map((item) => (
-                <div key={item.domain}>
-                  <div className="flex items-center justify-between mb-1">
-                    <span className="text-xs text-slate-600 dark:text-slate-300">
-                      {item.domain}
-                    </span>
-                    <span className="text-xs font-medium text-slate-800 dark:text-white">
-                      {item.percentage}%
-                    </span>
-                  </div>
-                  <div className="h-1.5 w-full rounded-full bg-slate-100 dark:bg-slate-700 overflow-hidden">
-                    <div
-                      className="h-full rounded-full bg-gradient-to-r from-indigo-500 to-purple-500 transition-all duration-500"
-                      style={{ width: `${item.percentage}%` }}
-                    />
-                  </div>
+            {dashboard.tendencies ? (
+              <>
+                {dashboard.tendencies.session_count < 5 && (
+                  <p className="text-[10px] text-slate-400 mb-4">
+                    More conversations = more accurate insights
+                  </p>
+                )}
+                <div className="space-y-4">
+                  {[
+                    { left: "Analytical", right: "Emotional", value: dashboard.tendencies.analytical_emotional },
+                    { left: "Future", right: "Present", value: dashboard.tendencies.future_present },
+                    { left: "Action", right: "Reflection", value: dashboard.tendencies.action_reflection },
+                    { left: "Optimistic", right: "Cautious", value: dashboard.tendencies.optimistic_cautious },
+                  ].map((item) => (
+                    <div key={item.left}>
+                      <div className="flex items-center justify-between mb-1.5">
+                        <span className="text-[10px] text-slate-500">{item.left}</span>
+                        <span className="text-[10px] text-slate-500">{item.right}</span>
+                      </div>
+                      <div className="relative h-2 w-full rounded-full bg-gradient-to-r from-indigo-400/20 via-slate-200 to-purple-400/20 dark:from-indigo-400/10 dark:via-slate-700 dark:to-purple-400/10">
+                        <div
+                          className="absolute top-1/2 -translate-y-1/2 h-3.5 w-3.5 rounded-full bg-gradient-to-r from-indigo-500 to-purple-500 shadow-md border-2 border-white dark:border-zinc-800 transition-all duration-500"
+                          style={{ left: `calc(${item.value}% - 7px)` }}
+                        />
+                      </div>
+                    </div>
+                  ))}
                 </div>
-              ))}
-            </div>
+                <p className="text-[10px] text-slate-400 mt-4 text-center">
+                  Based on {dashboard.tendencies.session_count} session{dashboard.tendencies.session_count > 1 ? "s" : ""}
+                </p>
+              </>
+            ) : (
+              <div className="text-center py-4">
+                <p className="text-xs text-slate-400 mb-1">No data yet</p>
+                <p className="text-[10px] text-slate-400">
+                  Complete a chat session to see your thinking tendencies
+                </p>
+              </div>
+            )}
           </div>
 
           {/* Pending Action Items */}

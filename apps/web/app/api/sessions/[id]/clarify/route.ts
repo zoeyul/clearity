@@ -41,6 +41,21 @@ const ClarifySummarySchema = z.object({
       "User's actual career, skills, problem-solving abilities, or resources they mentioned. Only factual data."
     ),
   }).describe("Extract user traits for cross-session personalization. Only use explicitly stated information — no guessing."),
+  // Thinking tendency scores
+  tendencies: z.object({
+    analytical_emotional: z.number().min(0).max(100).describe(
+      "0 = purely analytical/logical thinking, 100 = purely emotional/feeling-based thinking. Based on how the user reasons in this conversation."
+    ),
+    future_present: z.number().min(0).max(100).describe(
+      "0 = focused on future possibilities/plans, 100 = focused on present moment/current state. Based on temporal orientation of their thoughts."
+    ),
+    action_reflection: z.number().min(0).max(100).describe(
+      "0 = action-oriented (wants to do things), 100 = reflection-oriented (wants to think/understand). Based on whether they talk about doing or pondering."
+    ),
+    optimistic_cautious: z.number().min(0).max(100).describe(
+      "0 = sees possibilities and opportunities, 100 = sees risks and obstacles. Based on their framing of situations."
+    ),
+  }).describe("Score the user's thinking tendencies on each spectrum based ONLY on this conversation's evidence."),
 })
 
 export async function POST(
@@ -181,6 +196,38 @@ ${conversation}`,
       await supabase
         .from("user_profiles")
         .insert({ user_id: user.id, ...mergedProfile })
+    }
+
+    // Upsert user tendencies (running average)
+    const { data: existingTendencies } = await supabase
+      .from("user_tendencies")
+      .select("*")
+      .eq("user_id", user.id)
+      .single()
+
+    const t = object.tendencies
+    if (existingTendencies) {
+      const n = existingTendencies.session_count
+      // Running average: new_avg = (old_avg * n + new_value) / (n + 1)
+      await supabase
+        .from("user_tendencies")
+        .update({
+          analytical_emotional: Math.round((existingTendencies.analytical_emotional * n + t.analytical_emotional) / (n + 1)),
+          future_present: Math.round((existingTendencies.future_present * n + t.future_present) / (n + 1)),
+          action_reflection: Math.round((existingTendencies.action_reflection * n + t.action_reflection) / (n + 1)),
+          optimistic_cautious: Math.round((existingTendencies.optimistic_cautious * n + t.optimistic_cautious) / (n + 1)),
+          session_count: n + 1,
+          updated_at: new Date().toISOString(),
+        })
+        .eq("user_id", user.id)
+    } else {
+      await supabase
+        .from("user_tendencies")
+        .insert({
+          user_id: user.id,
+          ...t,
+          session_count: 1,
+        })
     }
 
     return Response.json({ summary, actionItems: items ?? [] })

@@ -18,6 +18,14 @@ export interface PendingAction {
   created_at: string
 }
 
+export interface UserTendencies {
+  analytical_emotional: number
+  future_present: number
+  action_reflection: number
+  optimistic_cautious: number
+  session_count: number
+}
+
 export interface DashboardData {
   userName: string
   weeklyMoods: DailyMood[]
@@ -25,6 +33,7 @@ export interface DashboardData {
   topKeywords: string[]
   keywordTrendMessage: string | null
   pendingActions: PendingAction[]
+  tendencies: UserTendencies | null
   recentSessionCount: number
   totalMessageCount: number
   isLoading: boolean
@@ -40,6 +49,7 @@ export function useDashboard() {
     topKeywords: [],
     keywordTrendMessage: null,
     pendingActions: [],
+    tendencies: null,
     recentSessionCount: 0,
     totalMessageCount: 0,
     isLoading: true,
@@ -133,7 +143,21 @@ export function useDashboard() {
       created_at: item.created_at as string,
     }))
 
-    setData({ userName, weeklyMoods, bestDay: bestDayEntry?.day ?? null, topKeywords, keywordTrendMessage, pendingActions, recentSessionCount: sessionsRes.count ?? 0, totalMessageCount: messagesRes.count ?? 0, isLoading: false })
+    // Fetch user tendencies
+    const { data: tendenciesData } = await supabase
+      .from("user_tendencies")
+      .select("analytical_emotional, future_present, action_reflection, optimistic_cautious, session_count")
+      .single()
+
+    const tendencies: UserTendencies | null = tendenciesData ? {
+      analytical_emotional: tendenciesData.analytical_emotional,
+      future_present: tendenciesData.future_present,
+      action_reflection: tendenciesData.action_reflection,
+      optimistic_cautious: tendenciesData.optimistic_cautious,
+      session_count: tendenciesData.session_count,
+    } : null
+
+    setData({ userName, weeklyMoods, bestDay: bestDayEntry?.day ?? null, topKeywords, keywordTrendMessage, pendingActions, tendencies, recentSessionCount: sessionsRes.count ?? 0, totalMessageCount: messagesRes.count ?? 0, isLoading: false })
   }, [supabase])
 
   useEffect(() => { fetchDashboard() }, [fetchDashboard])
