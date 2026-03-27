@@ -88,7 +88,7 @@ export function ChatArea(props: ChatAreaProps) {
 
   if (!isReady || initialMessages === null) {
     return (
-      <div className="flex flex-1 items-center justify-center">
+      <div className="glass flex h-full items-center justify-center">
         <p className="text-sm text-zinc-400">Loading...</p>
       </div>
     )
@@ -122,6 +122,7 @@ function ChatAreaInner({
   const [subKeywords, setSubKeywords] = useState<string[]>(loadedKeyword.subs)
   const [showClarifyModal, setShowClarifyModal] = useState(false)
   const [errorMessage, setErrorMessage] = useState<string | null>(null)
+  const [greetingLoading, setGreetingLoading] = useState(initialMessages.length === 0 && !!(headerKeyword || !noApiKey))
   const scrollRef = useRef<HTMLDivElement>(null)
   const supabaseRef = useRef(createClient())
   const supabase = supabaseRef.current
@@ -139,6 +140,7 @@ function ChatAreaInner({
   })
 
   // Hydrate useChat with DB messages on mount, or save greeting for fresh sessions
+  const greetingSavedRef = useRef(false)
   useEffect(() => {
     if (initialMessages.length > 0) {
       setMessages(initialMessages as Parameters<typeof setMessages>[0])
@@ -147,21 +149,51 @@ function ChatAreaInner({
           scrollRef.current.scrollTop = scrollRef.current.scrollHeight
         }
       }, 100)
-    } else if (headerKeyword || !noApiKey) {
-      // Fresh session — save greeting to DB immediately
-      const kw = headerKeyword
-      const greeting = kw
-        ? `You said: "${(context ?? '').length > 100 ? (context ?? '').slice(0, 100) + '...' : context ?? kw}" — this led to '${kw}'. What part of this is weighing on you the most?`
-        : "What's been on your mind lately? No need to organize it — just start wherever feels right."
+    } else if ((headerKeyword || !noApiKey) && !greetingSavedRef.current) {
+      greetingSavedRef.current = true
 
-      const saveGreeting = async () => {
-        await supabase.from("messages").insert({
-          session_id: sessionId,
-          role: "assistant",
-          content: greeting,
-        })
+      const generateAndSaveGreeting = async () => {
+        try {
+          const res = await fetch("/api/greeting", {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({ keyword: headerKeyword, context, apiKey, aboutMe }),
+          })
+          const { greeting } = await res.json()
+
+          const greetingMsg = {
+            id: crypto.randomUUID(),
+            role: "assistant" as const,
+            parts: [{ type: "text" as const, text: greeting }],
+          }
+          setMessages([greetingMsg] as Parameters<typeof setMessages>[0])
+          dbMessageIdsRef.current.add(greetingMsg.id)
+          setGreetingLoading(false)
+
+          await supabase.from("messages").insert({
+            session_id: sessionId,
+            role: "assistant",
+            content: greeting,
+          })
+        } catch {
+          // Fallback
+          const fallback = "What's been on your mind lately? No need to organize it — just start wherever feels right."
+          const msg = {
+            id: crypto.randomUUID(),
+            role: "assistant" as const,
+            parts: [{ type: "text" as const, text: fallback }],
+          }
+          setMessages([msg] as Parameters<typeof setMessages>[0])
+          dbMessageIdsRef.current.add(msg.id)
+          setGreetingLoading(false)
+          await supabase.from("messages").insert({
+            session_id: sessionId,
+            role: "assistant",
+            content: fallback,
+          })
+        }
       }
-      saveGreeting()
+      generateAndSaveGreeting()
     }
   }, []) // eslint-disable-line react-hooks/exhaustive-deps
 
@@ -175,12 +207,7 @@ function ChatAreaInner({
     }
   }, [error])
 
-  // If messages loaded from DB, show all (greeting is already in DB messages)
-  // If fresh session, skip first assistant message (shown as greeting card)
-  const hasDbMessages = initialMessages.length > 0
-  const displayMessages = !hasDbMessages && messages.length > 0 && messages[0].role === "assistant"
-    ? messages.slice(1)
-    : messages
+  const displayMessages = messages
 
   // Save assistant response to DB when streaming completes
   useEffect(() => {
@@ -201,7 +228,10 @@ function ChatAreaInner({
         .from("messages")
         .insert({ session_id: sessionId, role: "assistant", content })
       console.log("[saveAssistant]", { content: content.slice(0, 50), error })
-      if (!error) lastSavedIdRef.current = lastMsg.id
+      if (!error) {
+        lastSavedIdRef.current = lastMsg.id
+        dbMessageIdsRef.current.add(lastMsg.id)
+      }
     }
     save()
   }, [status, messages.length, sessionId, supabase])
@@ -352,26 +382,18 @@ function ChatAreaInner({
           </div>
         ) : (
           <div className="flex flex-col gap-6 py-6">
-            {/* Greeting card — only for fresh sessions */}
-            {!hasDbMessages && <div className="flex justify-start px-2">
-              <motion.div
-                initial={{ opacity: 0, y: 10 }}
-                animate={{ opacity: 1, y: 0 }}
-                transition={{ duration: 0.6, ease: "easeOut" }}
-                className="relative glass-subtle !rounded-3xl px-5 py-3.5 text-sm leading-relaxed text-zinc-800 dark:text-zinc-200 w-fit border-l-2 border-l-zinc-300/40 dark:border-l-zinc-600/40"
-              >
-                <Sparkles className="absolute -top-3.5 -left-3.5 h-4 w-4 text-zinc-300 dark:text-zinc-600" />
-                {keyword ? (
-                  <>
-                    You said: &ldquo;{(context ?? keyword).length > 100 ? (context ?? keyword).slice(0, 100) + '...' : (context ?? keyword)}&rdquo; — this led to &apos;
-                    <span className="font-semibold">{keyword}</span>
-                    &apos;. What part of this is weighing on you the most?
-                  </>
-                ) : (
-                  "What's been on your mind lately? No need to organize it — just start wherever feels right."
-                )}
-              </motion.div>
-            </div>}
+            {/* Greeting loading indicator */}
+            {greetingLoading && (
+              <div className="flex justify-start">
+                <div className="glass-subtle !rounded-3xl px-5 py-3.5 border-l-2 border-l-zinc-300/40 dark:border-l-zinc-600/40">
+                  <div className="flex gap-1">
+                    <span className="h-2 w-2 rounded-full bg-zinc-400 animate-bounce" style={{ animationDelay: "0ms" }} />
+                    <span className="h-2 w-2 rounded-full bg-zinc-400 animate-bounce" style={{ animationDelay: "150ms" }} />
+                    <span className="h-2 w-2 rounded-full bg-zinc-400 animate-bounce" style={{ animationDelay: "300ms" }} />
+                  </div>
+                </div>
+              </div>
+            )}
 
             {displayMessages.map((message) => (
               <div
@@ -389,16 +411,32 @@ function ChatAreaInner({
                     })}
                   </div>
                 ) : (
-                  <div className="relative text-sm leading-relaxed text-zinc-700 dark:text-zinc-300 max-w-[85%] w-fit px-2 py-1">
-                    <Sparkles className="absolute -top-3 -left-3 h-4 w-4 text-[#a8b8c8] dark:text-[#8899aa]" />
-                    {message.parts.map((part, i) => {
-                      if (part.type === "text") return <span key={i} className="whitespace-pre-wrap">{part.text}</span>
-                      return null
-                    })}
+                  <div className="relative glass-subtle !rounded-3xl px-5 py-3.5 text-sm leading-relaxed text-zinc-800 dark:text-zinc-200 max-w-[85%] w-fit border-l-2 border-l-zinc-300/40 dark:border-l-zinc-600/40">
+                    <Sparkles className="absolute -top-3.5 -left-3.5 h-4 w-4 text-zinc-300 dark:text-zinc-600" />
+                    <div className="space-y-3">
+                      {message.parts.map((part, i) => {
+                        if (part.type === "text") {
+                          // Split by double newlines into paragraphs, render **bold** inline
+                          const paragraphs = part.text.split(/\n\n+/)
+                          return paragraphs.map((para, pi) => (
+                            <p key={`${i}-${pi}`}>
+                              {para.split(/(\*\*[^*]+\*\*)/).map((seg, si) =>
+                                seg.startsWith("**") && seg.endsWith("**")
+                                  ? <strong key={si} className="font-semibold">{seg.slice(2, -2)}</strong>
+                                  : <span key={si}>{seg}</span>
+                              )}
+                            </p>
+                          ))
+                        }
+                        return null
+                      })}
+                    </div>
                   </div>
                 )}
               </div>
             ))}
+
+            {/* Streaming loading indicator */}
             {isStreaming && messages[messages.length - 1]?.role !== "assistant" && (
               <div className="flex justify-start">
                 <div className="glass-subtle !rounded-3xl px-5 py-3.5 border-l-2 border-l-zinc-300/40 dark:border-l-zinc-600/40">
