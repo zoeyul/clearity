@@ -2,6 +2,7 @@ import { createGoogleGenerativeAI } from "@ai-sdk/google"
 import { generateObject } from "ai"
 import { z } from "zod"
 import { createServerSupabaseClient } from "@clearity/lib/supabase/server"
+import { MODELS } from "@clearity/lib"
 
 export const maxDuration = 30
 
@@ -112,7 +113,7 @@ export async function POST(
     const google = createGoogleGenerativeAI({ apiKey })
 
     const { object } = await generateObject({
-      model: google("gemini-2.5-flash"),
+      model: google(MODELS.chat),
       maxRetries: 0,
       schema: ClarifySummarySchema,
       prompt: `You are Clara, an intellectual companion who helps people untangle complex thoughts and find clarity. You've just finished a conversation with a user. Generate a structured summary.

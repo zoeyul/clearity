@@ -1,5 +1,6 @@
 import { createGoogleGenerativeAI } from "@ai-sdk/google"
 import { generateObject, embed } from "ai"
+import { MODELS } from "@clearity/lib"
 import { z } from "zod"
 import { createServerSupabaseClient } from "@clearity/lib/supabase/server"
 import { cosineSimilarity } from "@clearity/lib/utils/cosine"
@@ -34,7 +35,7 @@ export async function POST(req: Request) {
   try {
     // 1. Extract keywords via Gemini
     const { object } = await generateObject({
-      model: google("gemini-2.5-flash"),
+      model: google(MODELS.chat),
       maxRetries: 0,
       schema: ExtractionSchema,
       prompt: `You are analyzing someone's inner thoughts. Identify the thought that keeps occupying their mind — the thing they can't stop thinking about.
@@ -55,7 +56,7 @@ User message: "${message}"`,
     let mainEmbedding: number[] | null = null
     try {
       const { embedding } = await embed({
-        model: google.textEmbeddingModel("gemini-embedding-001"),
+        model: google.textEmbeddingModel(MODELS.embedding),
         value: `${object.main} — ${message}`,
       })
       mainEmbedding = embedding

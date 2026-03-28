@@ -17,8 +17,7 @@ Clearity is a personal thought-organizing app that helps you untangle complex th
 - **Framework**: Next.js 14 (App Router) + React 18
 - **Styling**: Tailwind CSS 4.2 + Shadcn UI (glassmorphism design)
 - **AI**: Vercel AI SDK v6
-  - `gemini-3-flash-preview` — Chat & greeting generation
-  - `gemini-2.5-flash` — Keyword extraction, session analysis, tendency scoring
+  - `gemini-3-flash-preview` — Chat, greeting, keyword extraction, session analysis, tendency scoring
   - `gemini-embedding-001` — Vector embeddings for keyword similarity
 - **Backend**: Supabase (auth, PostgreSQL, RLS)
 - **Desktop**: Tauri v2
@@ -76,7 +75,6 @@ apps/mobile  ──→ apps/web (loads deployed Vercel URL)
 | `POST /api/extract-keywords` | Extract keywords + embeddings from user input |
 | `POST /api/sessions/[id]/clarify` | Generate session summary & user profile analysis |
 | `POST /api/sessions/[id]/cleanup` | Delete empty sessions on page leave |
-| `POST /api/backfill-tendencies` | Batch analyze thinking tendencies across sessions |
 | `POST /api/account/delete` | Delete user account (service role) |
 | `GET /auth/callback` | Google OAuth callback handler |
 

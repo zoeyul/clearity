@@ -1,5 +1,6 @@
 import { createGoogleGenerativeAI } from "@ai-sdk/google"
 import { generateText } from "ai"
+import { MODELS } from "@clearity/lib"
 
 export const maxDuration = 15
 
@@ -14,7 +15,7 @@ export async function POST(req: Request) {
     const google = createGoogleGenerativeAI({ apiKey })
 
     const { text } = await generateText({
-      model: google("gemini-3-flash-preview"),
+      model: google(MODELS.chat),
       maxRetries: 0,
       system: `You are Clara, a warm but concise thought-organizing companion. Generate ONE opening message for a conversation.
 

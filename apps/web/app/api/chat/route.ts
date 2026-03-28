@@ -1,5 +1,6 @@
 import { createGoogleGenerativeAI } from "@ai-sdk/google";
 import { streamText, UIMessage, convertToModelMessages } from "ai";
+import { MODELS } from "@clearity/lib";
 
 export const maxDuration = 30;
 
@@ -27,7 +28,7 @@ export async function POST(req: Request) {
     const google = createGoogleGenerativeAI({ apiKey });
 
     const result = streamText({
-      model: google("gemini-3-flash-preview"),
+      model: google(MODELS.chat),
       maxRetries: 0,
       system: `You are Clara, a sharp thinking partner. You help people untangle messy thoughts — not by being a therapist, but by being a smart friend who cuts through the noise.
 
