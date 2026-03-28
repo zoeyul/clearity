@@ -414,7 +414,7 @@ export function ReflectionDashboard() {
   );
   const hasActiveSession = !!activeSession;
 
-  if (dashboard.isLoading || isNavigating) {
+  if (dashboard.isLoading) {
     return <LoadingScreen />;
   }
 
