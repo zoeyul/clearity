@@ -48,6 +48,7 @@ import {
   TEXTAREA_MAX_HEIGHT,
   PARTICLE_COUNT,
 } from "@/shared/lib/constants";
+import { useAsyncLock } from "@/shared/lib/use-debounce";
 
 export function ReflectionDashboard() {
   const [inputValue, setInputValue] = useState("");
@@ -347,13 +348,12 @@ export function ReflectionDashboard() {
     }
   };
 
-  const handleKeywordClick = async (keywordText: string) => {
+  const handleKeywordClick = useAsyncLock(async (keywordText: string) => {
     const {
       data: { user },
     } = await supabase.auth.getUser();
     if (!user) return;
 
-    // Check for existing session with this keyword
     const { data: existingSession } = await supabase
       .from("chat_sessions")
       .select("id, status")
@@ -372,7 +372,6 @@ export function ReflectionDashboard() {
       return;
     }
 
-    // Create new session
     const id = crypto.randomUUID();
     const { error } = await supabase
       .from("chat_sessions")
@@ -399,7 +398,7 @@ export function ReflectionDashboard() {
 
     chatHistory.refetch();
     router.push(`/chat/${id}?${params.toString()}`);
-  };
+  });
 
   const handleSelectSession = (sessionId: string) =>
     router.push(`/chat/${sessionId}`);
