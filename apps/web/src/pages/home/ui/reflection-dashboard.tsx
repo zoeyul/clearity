@@ -20,75 +20,100 @@ import {
   forceX,
   forceY,
   forceCollide,
-  type SimulationNodeDatum,
   type SimulationLinkDatum,
 } from "d3-force";
+import type { CanvasKeyword, ForceNode, SimilarityRelation } from "@/shared/lib/types";
+import {
+  CANVAS_WIDTH,
+  CANVAS_HEIGHT,
+  CANVAS_CENTER_X,
+  CANVAS_CENTER_Y,
+  CANVAS_PADDING,
+  FORCE_ALPHA,
+  FORCE_CHARGE,
+  FORCE_COLLIDE_RADIUS,
+  FORCE_COLLIDE_STRENGTH,
+  FORCE_DEFAULT_DISTANCE,
+  FORCE_DEFAULT_STRENGTH,
+  FORCE_CENTER_STRENGTH_MAX,
+  FORCE_CENTER_STRENGTH_BASE,
+  FORCE_CENTER_STRENGTH_RANGE,
+  FORCE_LINK_MULTIPLIER,
+  FORCE_LINK_MAX_DISTANCE,
+  FORCE_LINK_MIN_DISTANCE,
+  FORCE_INIT_DELAY,
+  SIMILARITY_DISPLAY_THRESHOLD,
+  GLOW_DURATION,
+  ERROR_DISPLAY_DURATION,
+  TEXTAREA_MAX_HEIGHT,
+  PARTICLE_COUNT,
+} from "@/shared/lib/constants";
 
 export function ReflectionDashboard() {
+  const [inputValue, setInputValue] = useState("");
+  const [isExtracting, setIsExtracting] = useState(false);
+  const [expandedMain, setExpandedMain] = useState<string | null>(null);
+  const [canvasKeywords, setCanvasKeywords] = useState<CanvasKeyword[]>([]);
+  const [hasApiKey, setHasApiKey] = useState(true);
+  const [errorMessage, setErrorMessage] = useState<string | null>(null);
+  const [glowingIds, setGlowingIds] = useState<Set<string>>(new Set());
+  const [similarities, setSimilarities] = useState<SimilarityRelation[]>([]);
+  const [nodePositions, setNodePositions] = useState<
+    Map<string, { x: number; y: number }>
+  >(new Map());
+  const [clarifySessionId, setClarifySessionId] = useState<string | null>(null);
+
+  const simulationRef = useRef<ReturnType<
+    typeof forceSimulation<ForceNode>
+  > | null>(null);
+
   const router = useRouter();
   const supabase = createClient();
   const dashboard = useDashboard();
   const chatHistory = useChatHistory();
   const handleNewSession = useNewSession();
-  const [inputValue, setInputValue] = useState("");
-  const [isExtracting, setIsExtracting] = useState(false);
-  const [expandedMain, setExpandedMain] = useState<string | null>(null);
-  const [canvasKeywords, setCanvasKeywords] = useState<
-    {
-      id: string;
-      text: string;
-      hierarchy: "main" | "sub";
-      parentId?: string;
-      hitCount?: number;
-      createdAt?: string;
-    }[]
-  >([]);
-  const [hasApiKey, setHasApiKey] = useState(true);
-  const [isNavigating, setIsNavigating] = useState(false);
-  const [errorMessage, setErrorMessage] = useState<string | null>(null);
-  const [glowingIds, setGlowingIds] = useState<Set<string>>(new Set());
-  const [similarities, setSimilarities] = useState<
-    { sourceId: string; targetId: string; score: number }[]
-  >([]);
 
   const mainKeywords = useMemo(
     () => canvasKeywords.filter((k) => k.hierarchy === "main"),
     [canvasKeywords],
   );
 
-  // d3-force simulation for node positioning
-  interface ForceNode extends SimulationNodeDatum {
-    id: string;
-    text: string;
-    hitCount: number;
-  }
-
-  const [nodePositions, setNodePositions] = useState<
-    Map<string, { x: number; y: number }>
-  >(new Map());
-  const simulationRef = useRef<ReturnType<
-    typeof forceSimulation<ForceNode>
-  > | null>(null);
-
-  // Stable key: only re-run simulation when keyword IDs or relations actually change
   const maxHitCount = Math.max(1, ...mainKeywords.map((k) => k.hitCount ?? 1));
   const mainKeywordIds = mainKeywords.map((k) => k.id).join(",");
   const similarityKey = similarities
     .map((r) => `${r.sourceId}-${r.targetId}`)
     .join(",");
 
+  const particles = useMemo(
+    () =>
+      Array.from({ length: PARTICLE_COUNT }).map(() => ({
+        size: 8 + Math.random() * 10,
+        x: 20 + Math.random() * 55,
+        y: 15 + Math.random() * 60,
+        duration: 7 + Math.random() * 10,
+        delay: Math.random() * -15,
+      })),
+    [],
+  );
+
+  const activeSession = chatHistory.sessions.find(
+    (s) => s.status === "active" && s.title && s.title !== "New Chat"
+  );
+  const hasActiveSession = !!activeSession;
+
+  // D3 force simulation
   useEffect(() => {
     if (mainKeywords.length === 0) {
       setNodePositions(new Map());
       return;
     }
 
-    const nodes: ForceNode[] = mainKeywords.map((kw, i) => ({
+    const nodes: ForceNode[] = mainKeywords.map((kw) => ({
       id: kw.id,
       text: kw.text,
       hitCount: kw.hitCount ?? 1,
-      x: 250,
-      y: 200,
+      x: CANVAS_CENTER_X,
+      y: CANVAS_CENTER_Y,
     }));
 
     const links: SimulationLinkDatum<ForceNode>[] = similarities
@@ -100,62 +125,61 @@ export function ReflectionDashboard() {
       .map((r) => ({
         source: r.sourceId,
         target: r.targetId,
-        strength: r.score * 1.5,
-        distance: Math.max(40, 180 * (1 - r.score)),
+        strength: r.score * FORCE_LINK_MULTIPLIER,
+        distance: Math.max(FORCE_LINK_MIN_DISTANCE, FORCE_LINK_MAX_DISTANCE * (1 - r.score)),
       }));
 
     if (simulationRef.current) simulationRef.current.stop();
 
     const timerId = setTimeout(() => {
       const sim = forceSimulation(nodes)
-        .alpha(0.4)
+        .alpha(FORCE_ALPHA)
         .force(
           "link",
           forceLink<ForceNode, SimulationLinkDatum<ForceNode>>(links)
             .id((d) => d.id)
             .distance(
               (d: SimulationLinkDatum<ForceNode> & { distance?: number }) =>
-                d.distance ?? 120,
+                d.distance ?? FORCE_DEFAULT_DISTANCE,
             )
             .strength(
               (d: SimulationLinkDatum<ForceNode> & { strength?: number }) =>
-                d.strength ?? 0.5,
+                d.strength ?? FORCE_DEFAULT_STRENGTH,
             ),
         )
-        .force("charge", forceManyBody().strength(-10))
+        .force("charge", forceManyBody().strength(FORCE_CHARGE))
         .force(
           "x",
-          forceX<ForceNode>(250).strength((d) => {
+          forceX<ForceNode>(CANVAS_CENTER_X).strength((d) => {
             const hc = d.hitCount;
-            // hit_count 최우선, 같으면 최신(index 큰 쪽)이 중앙
             const isNewest = d.id === mainKeywords[mainKeywords.length - 1].id;
-            if (hc === maxHitCount && isNewest) return 0.5;
-            return 0.05 + (hc / maxHitCount) * 0.4;
+            if (hc === maxHitCount && isNewest) return FORCE_CENTER_STRENGTH_MAX;
+            return FORCE_CENTER_STRENGTH_BASE + (hc / maxHitCount) * FORCE_CENTER_STRENGTH_RANGE;
           }),
         )
         .force(
           "y",
-          forceY<ForceNode>(200).strength((d) => {
+          forceY<ForceNode>(CANVAS_CENTER_Y).strength((d) => {
             const hc = d.hitCount;
             const isNewest = d.id === mainKeywords[mainKeywords.length - 1].id;
-            if (hc === maxHitCount && isNewest) return 0.5;
-            return 0.05 + (hc / maxHitCount) * 0.4;
+            if (hc === maxHitCount && isNewest) return FORCE_CENTER_STRENGTH_MAX;
+            return FORCE_CENTER_STRENGTH_BASE + (hc / maxHitCount) * FORCE_CENTER_STRENGTH_RANGE;
           }),
         )
-        .force("collide", forceCollide(35).strength(0.3))
+        .force("collide", forceCollide(FORCE_COLLIDE_RADIUS).strength(FORCE_COLLIDE_STRENGTH))
         .on("tick", () => {
           const positions = new Map<string, { x: number; y: number }>();
           nodes.forEach((n) => {
             positions.set(n.id, {
-              x: Math.max(40, Math.min(460, n.x ?? 250)),
-              y: Math.max(40, Math.min(360, n.y ?? 200)),
+              x: Math.max(CANVAS_PADDING, Math.min(CANVAS_WIDTH - CANVAS_PADDING, n.x ?? CANVAS_CENTER_X)),
+              y: Math.max(CANVAS_PADDING, Math.min(CANVAS_HEIGHT - CANVAS_PADDING, n.y ?? CANVAS_CENTER_Y)),
             });
           });
           setNodePositions(new Map(positions));
         });
 
       simulationRef.current = sim;
-    }, 100);
+    }, FORCE_INIT_DELAY);
 
     return () => {
       clearTimeout(timerId);
@@ -164,20 +188,7 @@ export function ReflectionDashboard() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [mainKeywordIds, similarityKey]);
 
-  // Fixed particle positions
-  const particles = useMemo(
-    () =>
-      Array.from({ length: 15 }).map(() => ({
-        size: 8 + Math.random() * 10,
-        x: 20 + Math.random() * 55,
-        y: 15 + Math.random() * 60,
-        duration: 7 + Math.random() * 10,
-        delay: Math.random() * -15,
-      })),
-    [],
-  );
-
-  // Check for API key — also listen for changes
+  // API key check — listen for changes
   useEffect(() => {
     const check = () => {
       const key = localStorage.getItem("clearity-api-key");
@@ -192,7 +203,11 @@ export function ReflectionDashboard() {
     };
   }, []);
 
-  // Load existing fragment keywords from DB
+  // Load keywords from DB
+  useEffect(() => {
+    loadKeywords();
+  }, [supabase]);
+
   const loadKeywords = async () => {
     const {
       data: { user },
@@ -243,11 +258,6 @@ export function ReflectionDashboard() {
     }
   };
 
-  useEffect(() => {
-    loadKeywords();
-  }, [supabase]);
-
-  // Extract keywords from input via Gemini
   const handleExtract = async () => {
     if (!inputValue.trim() || isExtracting) return;
 
@@ -277,7 +287,7 @@ export function ReflectionDashboard() {
 
       if (res.status === 429) {
         setErrorMessage("API rate limit reached. Please wait a moment and try again.");
-        setTimeout(() => setErrorMessage(null), 5000);
+        setTimeout(() => setErrorMessage(null), ERROR_DISPLAY_DURATION);
         return;
       }
 
@@ -285,7 +295,6 @@ export function ReflectionDashboard() {
         const data = await res.json();
 
         if (data.action === "merged") {
-          // Update hit_count + add new subs
           const newSubs = (data.subs ?? []).map(
             (sub: { id: string; label: string }) => ({
               id: sub.id,
@@ -303,9 +312,9 @@ export function ReflectionDashboard() {
             ...newSubs,
           ]);
           setGlowingIds(new Set([data.mergedInto]));
-          setTimeout(() => setGlowingIds(new Set()), 5000);
+          setTimeout(() => setGlowingIds(new Set()), GLOW_DURATION);
         } else if (data.action === "created") {
-          const newKeywords: typeof canvasKeywords = [
+          const newKeywords: CanvasKeyword[] = [
             {
               id: data.mainId,
               text: data.main,
@@ -326,10 +335,8 @@ export function ReflectionDashboard() {
           }
 
           setCanvasKeywords((prev) => [...prev, ...newKeywords]);
-          // Glow new main keyword for 5 seconds
           setGlowingIds(new Set([data.mainId]));
-          setTimeout(() => setGlowingIds(new Set()), 5000);
-          // Relations are already in DB, reload to get them
+          setTimeout(() => setGlowingIds(new Set()), GLOW_DURATION);
           loadKeywords();
         }
       }
@@ -340,18 +347,11 @@ export function ReflectionDashboard() {
     }
   };
 
-  const [clarifySessionId, setClarifySessionId] = useState<string | null>(null);
-
   const handleKeywordClick = async (keywordText: string) => {
-    setIsNavigating(true);
-
     const {
       data: { user },
     } = await supabase.auth.getUser();
-    if (!user) {
-      setIsNavigating(false);
-      return;
-    }
+    if (!user) return;
 
     // Check for existing session with this keyword
     const { data: existingSession } = await supabase
@@ -365,12 +365,9 @@ export function ReflectionDashboard() {
 
     if (existingSession) {
       if (existingSession.status === "completed") {
-        // Show summary modal
-        setIsNavigating(false);
         setClarifySessionId(existingSession.id);
         return;
       }
-      // Resume existing active session — DB messages already have greeting
       router.push(`/chat/${existingSession.id}`);
       return;
     }
@@ -383,7 +380,6 @@ export function ReflectionDashboard() {
 
     if (error) {
       console.error("[handleKeywordClick] insert failed:", error);
-      setIsNavigating(false);
       return;
     }
 
@@ -408,12 +404,6 @@ export function ReflectionDashboard() {
   const handleSelectSession = (sessionId: string) =>
     router.push(`/chat/${sessionId}`);
 
-  // Check for active session
-  const activeSession = chatHistory.sessions.find(
-    (s) => s.status === "active" && s.title && s.title !== "New Chat"
-  );
-  const hasActiveSession = !!activeSession;
-
   if (dashboard.isLoading) {
     return <LoadingScreen />;
   }
@@ -432,7 +422,7 @@ export function ReflectionDashboard() {
       />
 
       <div className="relative z-10 flex h-full w-full gap-4 p-4 lg:gap-5 lg:p-5">
-        {/* ========== LEFT: Sidebar — same as chat page ========== */}
+        {/* ========== LEFT: Sidebar ========== */}
         <div className="hidden w-[280px] shrink-0 lg:block h-full">
           <LeftSidebar
             sessions={chatHistory.sessions}
@@ -475,7 +465,7 @@ export function ReflectionDashboard() {
             className="flex-1 glass !rounded-3xl p-6 relative overflow-hidden"
             style={{ perspective: "600px", perspectiveOrigin: "50% 45%" }}
           >
-            {/* Central glow — always visible */}
+            {/* Central glow */}
             <div className="absolute inset-0 flex items-center justify-center pointer-events-none z-[1]">
               <div
                 className="w-48 h-48 rounded-full bg-sky-300/15 blur-[80px] animate-pulse"
@@ -483,10 +473,9 @@ export function ReflectionDashboard() {
               />
             </div>
 
-            {/* Ambient Particles — visible when canvas is empty or extracting */}
+            {/* Ambient Particles */}
             {(canvasKeywords.length === 0 || isExtracting) && (
               <div className="absolute inset-0 flex items-center justify-center">
-                {/* Particle field */}
                 {particles.map((p, i) => (
                   <svg
                     key={i}
@@ -507,7 +496,6 @@ export function ReflectionDashboard() {
                     />
                   </svg>
                 ))}
-                {/* Empty state text — only when no keywords */}
                 {canvasKeywords.length === 0 && (
                   <p
                     className={cn(
@@ -542,16 +530,16 @@ export function ReflectionDashboard() {
               }}
             >
               {similarities
-                .filter((s) => Math.round(s.score * 100) / 100 >= 0.65)
+                .filter((s) => Math.round(s.score * 100) / 100 >= SIMILARITY_DISPLAY_THRESHOLD)
                 .map((sim, i) => {
                   const sourcePos = nodePositions.get(sim.sourceId);
                   const targetPos = nodePositions.get(sim.targetId);
                   if (!sourcePos || !targetPos) return null;
 
-                  const sx = (sourcePos.x / 500) * 100;
-                  const sy = (sourcePos.y / 400) * 100;
-                  const tx = (targetPos.x / 500) * 100;
-                  const ty = (targetPos.y / 400) * 100;
+                  const sx = (sourcePos.x / CANVAS_WIDTH) * 100;
+                  const sy = (sourcePos.y / CANVAS_HEIGHT) * 100;
+                  const tx = (targetPos.x / CANVAS_WIDTH) * 100;
+                  const ty = (targetPos.y / CANVAS_HEIGHT) * 100;
 
                   return (
                     <line
@@ -560,8 +548,8 @@ export function ReflectionDashboard() {
                       y1={`${sy}%`}
                       x2={`${tx}%`}
                       y2={`${ty}%`}
-                      stroke={`rgba(148, 163, 184, ${Math.max(0.2, (sim.score - 0.65) / 0.35)})`}
-                      strokeWidth={1 + (sim.score - 0.65) * 15}
+                      stroke={`rgba(148, 163, 184, ${Math.max(0.2, (sim.score - SIMILARITY_DISPLAY_THRESHOLD) / (1 - SIMILARITY_DISPLAY_THRESHOLD))})`}
+                      strokeWidth={1 + (sim.score - SIMILARITY_DISPLAY_THRESHOLD) * 15}
                       strokeLinecap="round"
                     />
                   );
@@ -570,13 +558,12 @@ export function ReflectionDashboard() {
 
             {/* Keyword Constellation */}
             <div className="absolute inset-0 pointer-events-none z-10">
-              {/* Main keywords — pill stays in place, note slides out */}
               {mainKeywords.map((kw, i) => {
                 const isGlowing = glowingIds.has(kw.id);
                 const pos = nodePositions.get(kw.id);
                 if (!pos) return null;
-                const x = (pos.x / 500) * 100;
-                const y = (pos.y / 400) * 100;
+                const x = (pos.x / CANVAS_WIDTH) * 100;
+                const y = (pos.y / CANVAS_HEIGHT) * 100;
                 const isExpanded = expandedMain === kw.text;
                 const isFaded = expandedMain !== null && !isExpanded;
                 const subs = canvasKeywords.filter(
@@ -609,7 +596,7 @@ export function ReflectionDashboard() {
                       {kw.text}
                     </div>
 
-                    {/* Note — positioned relative to keyword via left/right: 100% */}
+                    {/* Note card */}
                     {isExpanded && (
                       <div
                         className="absolute flex items-center pointer-events-none"
@@ -684,7 +671,6 @@ export function ReflectionDashboard() {
             {/* Input */}
             <div className="absolute inset-x-0 bottom-6 flex justify-center px-6">
               <div className="w-full max-w-xl">
-                {/* Extracting status — above input when keywords exist */}
                 {isExtracting && canvasKeywords.length > 0 && (
                   <p className="text-center text-[11px] text-zinc-500 mb-2 animate-pulse">
                     Extracting your thoughts...
@@ -695,10 +681,9 @@ export function ReflectionDashboard() {
                     value={inputValue}
                     onChange={(e) => {
                       setInputValue(e.target.value);
-                      // Auto-resize
                       e.target.style.height = "auto";
                       e.target.style.height =
-                        Math.min(e.target.scrollHeight, 160) + "px";
+                        Math.min(e.target.scrollHeight, TEXTAREA_MAX_HEIGHT) + "px";
                     }}
                     onKeyDown={(e) => {
                       if (

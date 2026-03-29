@@ -8,6 +8,7 @@ import { NotePanel } from "@/pages/chat/ui/note-panel"
 import { useSession } from "@/shared/lib/use-session"
 import { useChatHistory } from "@/shared/lib/use-chat-history"
 import { createClient } from "@clearity/lib"
+import { NOTE_PANEL_DEFAULT_WIDTH, NOTE_PANEL_MIN_WIDTH, NOTE_PANEL_MAX_WIDTH } from "@/shared/lib/constants"
 
 interface ClearityDashboardProps {
   sessionId: string
@@ -21,7 +22,7 @@ export function ClearityDashboard({ sessionId, keyword, context }: ClearityDashb
   const chatHistory = useChatHistory()
   const session = useSession(sessionId)
   const [showNotes, setShowNotes] = useState(true)
-  const [noteWidth, setNoteWidth] = useState(320)
+  const [noteWidth, setNoteWidth] = useState(NOTE_PANEL_DEFAULT_WIDTH)
   const isResizingRef = useRef(false)
 
   const handleNewChat = async () => {
@@ -51,7 +52,7 @@ export function ClearityDashboard({ sessionId, keyword, context }: ClearityDashb
 
     const onMouseMove = (e: MouseEvent) => {
       if (!isResizingRef.current) return
-      const newWidth = Math.max(240, Math.min(600, startWidth - (e.clientX - startX)))
+      const newWidth = Math.max(NOTE_PANEL_MIN_WIDTH, Math.min(NOTE_PANEL_MAX_WIDTH, startWidth - (e.clientX - startX)))
       setNoteWidth(newWidth)
     }
 

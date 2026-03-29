@@ -1,6 +1,6 @@
 "use client"
 
-import { useState, useRef, useEffect, useCallback } from "react"
+import { useState, useRef, useEffect } from "react"
 import { useChat } from "@ai-sdk/react"
 import { DefaultChatTransport } from "ai"
 import { motion } from "framer-motion"
@@ -16,6 +16,10 @@ import {
 import { cn } from "@clearity/ui/lib/utils"
 import { ClarifyModal } from "@/shared/ui/clarify-modal"
 import { MobileSidebar } from "@/shared/ui/mobile-sidebar"
+import { ERROR_DISPLAY_DURATION } from "@/shared/lib/constants"
+import { useMessagePersistence } from "@/pages/chat/lib/use-message-persistence"
+import { useGreeting } from "@/pages/chat/lib/use-greeting"
+import type { InitialMessage, ProfileData } from "@/shared/lib/types"
 
 interface ChatAreaProps {
   sessionId: string
@@ -31,10 +35,11 @@ interface ChatAreaProps {
 export function ChatArea(props: ChatAreaProps) {
   const [apiKey, setApiKey] = useState<string | null>(null)
   const [aboutMe, setAboutMe] = useState<string | null>(null)
-  const [userProfile, setUserProfile] = useState<{ interests: string; patterns: string; threshold: string; assets: string } | null>(null)
-  const [initialMessages, setInitialMessages] = useState<{ id: string; role: "user" | "assistant"; parts: { type: "text"; text: string }[] }[] | null>(null)
+  const [userProfile, setUserProfile] = useState<ProfileData | null>(null)
+  const [initialMessages, setInitialMessages] = useState<InitialMessage[] | null>(null)
   const [loadedKeyword, setLoadedKeyword] = useState<{ main: string | null; subs: string[] }>({ main: null, subs: [] })
   const [isReady, setIsReady] = useState(false)
+
   const supabaseRef = useRef(createClient())
 
   useEffect(() => {
@@ -71,9 +76,8 @@ export function ChatArea(props: ChatAreaProps) {
         }))
       )
       if (profileRes.data) {
-        setUserProfile(profileRes.data as { interests: string; patterns: string; threshold: string; assets: string })
+        setUserProfile(profileRes.data as ProfileData)
       }
-      // Load keywords for this session (fallback to session title)
       const kws = keywordsRes.data ?? []
       const mainKw = kws.find(k => k.intensity === "high")
       const subKws = kws.filter(k => k.intensity !== "high").map(k => k.label)
@@ -97,10 +101,6 @@ export function ChatArea(props: ChatAreaProps) {
   return <ChatAreaInner {...props} apiKey={apiKey} aboutMe={aboutMe} userProfile={userProfile} initialMessages={initialMessages} loadedKeyword={loadedKeyword} />
 }
 
-type InitialMessage = { id: string; role: "user" | "assistant"; parts: { type: "text"; text: string }[] }
-
-type ProfileData = { interests: string; patterns: string; threshold: string; assets: string }
-
 function ChatAreaInner({
   sessionId,
   sessionStatus,
@@ -109,27 +109,24 @@ function ChatAreaInner({
   keyword,
   context,
   onToggleNotes,
-  showNotes,
   apiKey,
   aboutMe,
   userProfile,
   initialMessages,
   loadedKeyword,
 }: ChatAreaProps & { apiKey: string | null; aboutMe: string | null; userProfile: ProfileData | null; initialMessages: InitialMessage[]; loadedKeyword: { main: string | null; subs: string[] } }) {
-  const router = useRouter()
   const [inputValue, setInputValue] = useState("")
   const [headerKeyword, setHeaderKeyword] = useState<string | null>(loadedKeyword.main ?? keyword ?? null)
   const [subKeywords, setSubKeywords] = useState<string[]>(loadedKeyword.subs)
   const [showClarifyModal, setShowClarifyModal] = useState(false)
   const [errorMessage, setErrorMessage] = useState<string | null>(null)
-  const [greetingLoading, setGreetingLoading] = useState(initialMessages.length === 0 && !!(headerKeyword || !noApiKey))
+
   const scrollRef = useRef<HTMLDivElement>(null)
   const supabaseRef = useRef(createClient())
   const supabase = supabaseRef.current
-  const lastSavedIdRef = useRef<string | null>(null)
-  const noApiKey = !apiKey
 
-  const dbMessageIdsRef = useRef(new Set(initialMessages.map(m => m.id)))
+  const router = useRouter()
+  const noApiKey = !apiKey
 
   const { messages, setMessages, sendMessage, status, error } = useChat({
     id: sessionId,
@@ -139,8 +136,30 @@ function ChatAreaInner({
     }),
   })
 
-  // Hydrate useChat with DB messages on mount, or save greeting for fresh sessions
-  const greetingSavedRef = useRef(false)
+  const dbMessageIdsRef = useMessagePersistence(
+    sessionId,
+    messages,
+    status,
+    supabase,
+    new Set(initialMessages.map(m => m.id)),
+  )
+
+  const greetingLoading = useGreeting({
+    sessionId,
+    keyword: headerKeyword,
+    context,
+    apiKey,
+    aboutMe,
+    hasInitialMessages: initialMessages.length > 0,
+    supabase,
+    setMessages: setMessages as (msgs: { id: string; role: "assistant"; parts: { type: "text"; text: string }[] }[]) => void,
+    dbMessageIdsRef,
+  })
+
+  const isStreaming = status === "streaming" || status === "submitted"
+
+
+  // Hydrate useChat with DB messages on mount
   useEffect(() => {
     if (initialMessages.length > 0) {
       setMessages(initialMessages as Parameters<typeof setMessages>[0])
@@ -149,92 +168,16 @@ function ChatAreaInner({
           scrollRef.current.scrollTop = scrollRef.current.scrollHeight
         }
       }, 100)
-    } else if ((headerKeyword || !noApiKey) && !greetingSavedRef.current) {
-      greetingSavedRef.current = true
-
-      const generateAndSaveGreeting = async () => {
-        try {
-          const res = await fetch("/api/greeting", {
-            method: "POST",
-            headers: { "Content-Type": "application/json" },
-            body: JSON.stringify({ keyword: headerKeyword, context, apiKey, aboutMe }),
-          })
-          const { greeting } = await res.json()
-
-          const greetingMsg = {
-            id: crypto.randomUUID(),
-            role: "assistant" as const,
-            parts: [{ type: "text" as const, text: greeting }],
-          }
-          setMessages([greetingMsg] as Parameters<typeof setMessages>[0])
-          dbMessageIdsRef.current.add(greetingMsg.id)
-          setGreetingLoading(false)
-
-          await supabase.from("messages").insert({
-            session_id: sessionId,
-            role: "assistant",
-            content: greeting,
-          })
-        } catch {
-          // Fallback
-          const fallback = "What's been on your mind lately? No need to organize it — just start wherever feels right."
-          const msg = {
-            id: crypto.randomUUID(),
-            role: "assistant" as const,
-            parts: [{ type: "text" as const, text: fallback }],
-          }
-          setMessages([msg] as Parameters<typeof setMessages>[0])
-          dbMessageIdsRef.current.add(msg.id)
-          setGreetingLoading(false)
-          await supabase.from("messages").insert({
-            session_id: sessionId,
-            role: "assistant",
-            content: fallback,
-          })
-        }
-      }
-      generateAndSaveGreeting()
     }
   }, []) // eslint-disable-line react-hooks/exhaustive-deps
-
-  const isStreaming = status === "streaming" || status === "submitted"
 
   // Show rate limit error
   useEffect(() => {
     if (error?.message?.includes("429") || error?.message?.includes("rate") || error?.message?.includes("quota")) {
       setErrorMessage("API rate limit reached. Please wait a moment and try again.")
-      setTimeout(() => setErrorMessage(null), 5000)
+      setTimeout(() => setErrorMessage(null), ERROR_DISPLAY_DURATION)
     }
   }, [error])
-
-  const displayMessages = messages
-
-  // Save assistant response to DB when streaming completes
-  useEffect(() => {
-    if (status !== "ready" || messages.length === 0) return
-    const lastMsg = messages[messages.length - 1]
-    if (!lastMsg || lastMsg.role !== "assistant") return
-    if (lastMsg.id === lastSavedIdRef.current) return
-    if (dbMessageIdsRef.current.has(lastMsg.id)) return
-
-    const content = lastMsg.parts
-      ?.filter((p: { type: string }) => p.type === "text")
-      .map((p: { type: string; text?: string }) => p.text ?? "")
-      .join("") ?? ""
-    if (!content) return
-
-    const save = async () => {
-      const { error } = await supabase
-        .from("messages")
-        .insert({ session_id: sessionId, role: "assistant", content })
-      console.log("[saveAssistant]", { content: content.slice(0, 50), error })
-      if (!error) {
-        lastSavedIdRef.current = lastMsg.id
-        dbMessageIdsRef.current.add(lastMsg.id)
-      }
-    }
-    save()
-  }, [status, messages.length, sessionId, supabase])
 
   // Auto-scroll
   useEffect(() => {
@@ -243,17 +186,16 @@ function ChatAreaInner({
     }
   }, [messages.length, status])
 
+
   const handleSend = async () => {
     if (!inputValue.trim() || isStreaming || sessionStatus === "completed" || noApiKey) return
 
     const messageText = inputValue
     const isFirstMessage = messages.length === 0
 
-    // Save user message (greeting already saved on mount)
-    const { error } = await supabase
+    await supabase
       .from("messages")
       .insert({ session_id: sessionId, role: "user", content: messageText })
-    console.log("[userMessage]", { error })
 
     sendMessage({ text: messageText })
     setInputValue("")
@@ -271,15 +213,12 @@ function ChatAreaInner({
           setHeaderKeyword(data.main)
           setSubKeywords(data.subs?.map((s: { label: string }) => s.label) ?? [])
 
-          // Update session title in DB
-          const supabase = (await import("@clearity/lib")).createClient()
           await supabase
             .from("chat_sessions")
             .update({ title: data.sessionTitle })
             .eq("id", sessionId)
         }
       } catch {
-        // Fallback: use simple extraction
         const words = messageText.trim().split(/\s+/)
         const extracted = words.filter(w => w.length > 3).sort((a, b) => b.length - a.length)[0] ?? words[0]
         setHeaderKeyword(extracted)
@@ -291,15 +230,14 @@ function ChatAreaInner({
     setShowClarifyModal(true)
   }
 
+
   return (
     <div className="glass flex h-full flex-col">
       {/* Header */}
       <header className="relative z-10 flex items-center justify-between border-b border-white/15 px-4 py-3 lg:px-6">
         <div className="flex items-center gap-3">
-          {/* Mobile menu */}
           <MobileSidebar activeSessionId={sessionId} />
 
-          {/* Dynamic keyword header */}
           {headerKeyword ? (
             <motion.div
               initial={{ opacity: 0, y: -5 }}
@@ -332,7 +270,6 @@ function ChatAreaInner({
         </div>
 
         <div className="flex items-center gap-2">
-          {/* Note toggle */}
           {onToggleNotes && (
             <Button
               onClick={onToggleNotes}
@@ -345,7 +282,6 @@ function ChatAreaInner({
             </Button>
           )}
 
-          {/* Clarify button — appears with keyword */}
           {headerKeyword && (
             <motion.div
               initial={{ opacity: 0, scale: 0.95 }}
@@ -382,7 +318,6 @@ function ChatAreaInner({
           </div>
         ) : (
           <div className="flex flex-col gap-6 py-6">
-            {/* Greeting loading indicator */}
             {greetingLoading && (
               <div className="flex justify-start">
                 <div className="glass-subtle !rounded-3xl px-5 py-3.5 border-l-2 border-l-zinc-300/40 dark:border-l-zinc-600/40">
@@ -395,7 +330,7 @@ function ChatAreaInner({
               </div>
             )}
 
-            {displayMessages.map((message) => (
+            {messages.map((message) => (
               <div
                 key={message.id}
                 className={cn(
@@ -416,7 +351,6 @@ function ChatAreaInner({
                     <div className="space-y-3">
                       {message.parts.map((part, i) => {
                         if (part.type === "text") {
-                          // Split by double newlines into paragraphs, render **bold** inline
                           const paragraphs = part.text.split(/\n\n+/)
                           return paragraphs.map((para, pi) => (
                             <p key={`${i}-${pi}`}>
@@ -436,7 +370,6 @@ function ChatAreaInner({
               </div>
             ))}
 
-            {/* Streaming loading indicator */}
             {isStreaming && messages[messages.length - 1]?.role !== "assistant" && (
               <div className="flex justify-start">
                 <div className="glass-subtle !rounded-3xl px-5 py-3.5 border-l-2 border-l-zinc-300/40 dark:border-l-zinc-600/40">
