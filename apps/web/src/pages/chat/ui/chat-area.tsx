@@ -82,7 +82,7 @@ export function ChatArea(props: ChatAreaProps) {
       const mainKw = kws.find(k => k.intensity === "high")
       const subKws = kws.filter(k => k.intensity !== "high").map(k => k.label)
       const sessionTitle = sessionRes.data?.title ?? null
-      const mainLabel = mainKw?.label ?? (sessionTitle && sessionTitle !== "New conversation" ? sessionTitle : null)
+      const mainLabel = props.keyword ?? mainKw?.label ?? (sessionTitle && sessionTitle !== "New Chat" ? sessionTitle : null)
       setLoadedKeyword({ main: mainLabel, subs: subKws })
 
       setIsReady(true)
@@ -116,7 +116,7 @@ function ChatAreaInner({
   loadedKeyword,
 }: ChatAreaProps & { apiKey: string | null; aboutMe: string | null; userProfile: ProfileData | null; initialMessages: InitialMessage[]; loadedKeyword: { main: string | null; subs: string[] } }) {
   const [inputValue, setInputValue] = useState("")
-  const [headerKeyword, setHeaderKeyword] = useState<string | null>(loadedKeyword.main ?? keyword ?? null)
+  const [headerKeyword, setHeaderKeyword] = useState<string | null>(loadedKeyword.main)
   const [subKeywords, setSubKeywords] = useState<string[]>(loadedKeyword.subs)
   const [showClarifyModal, setShowClarifyModal] = useState(false)
   const [errorMessage, setErrorMessage] = useState<string | null>(null)
@@ -191,7 +191,7 @@ function ChatAreaInner({
     if (!inputValue.trim() || isStreaming || sessionStatus === "completed" || noApiKey) return
 
     const messageText = inputValue
-    const isFirstMessage = messages.length === 0
+    const isFirstUserMessage = messages.filter(m => m.role === "user").length === 0
 
     await supabase
       .from("messages")
@@ -201,7 +201,7 @@ function ChatAreaInner({
     setInputValue("")
 
     // Extract keywords from first message via Gemini
-    if (!headerKeyword && isFirstMessage) {
+    if (!headerKeyword && isFirstUserMessage) {
       try {
         const res = await fetch("/api/extract-keywords", {
           method: "POST",

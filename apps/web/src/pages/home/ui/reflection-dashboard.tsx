@@ -363,26 +363,26 @@ export function ReflectionDashboard() {
       .limit(1)
       .single();
 
-    if (existingSession) {
-      if (existingSession.status === "completed") {
-        setClarifySessionId(existingSession.id);
+    if (existingSession?.status === "completed") {
+      setClarifySessionId(existingSession.id);
+      return;
+    }
+
+    let sessionId = existingSession?.id;
+
+    if (!sessionId) {
+      const id = crypto.randomUUID();
+      const { error } = await supabase
+        .from("chat_sessions")
+        .insert({ id, title: keywordText, user_id: user.id });
+      if (error) {
+        console.error("[handleKeywordClick] insert failed:", error);
         return;
       }
-      router.push(`/chat/${existingSession.id}`);
-      return;
+      sessionId = id;
+      chatHistory.refetch();
     }
 
-    const id = crypto.randomUUID();
-    const { error } = await supabase
-      .from("chat_sessions")
-      .insert({ id, title: keywordText, user_id: user.id });
-
-    if (error) {
-      console.error("[handleKeywordClick] insert failed:", error);
-      return;
-    }
-
-    // Look up original message for this keyword
     const { data: inputData } = await supabase
       .from("user_inputs")
       .select("message")
@@ -396,8 +396,7 @@ export function ReflectionDashboard() {
       params.set("context", inputData.message);
     }
 
-    chatHistory.refetch();
-    router.push(`/chat/${id}?${params.toString()}`);
+    router.push(`/chat/${sessionId}?${params.toString()}`);
   });
 
   const handleSelectSession = (sessionId: string) =>

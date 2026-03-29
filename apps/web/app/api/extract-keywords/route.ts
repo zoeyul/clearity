@@ -131,6 +131,7 @@ User message: "${message}"`,
       return Response.json({
         action: "merged",
         mergedInto: matchedKeywordId,
+        main: object.main,
         sessionTitle: object.sessionTitle,
         subs: newSubs,
       })
