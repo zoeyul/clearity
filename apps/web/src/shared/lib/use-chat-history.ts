@@ -40,5 +40,11 @@ export function useChatHistory() {
     return session
   }, [supabase])
 
-  return { sessions, isLoading, createSession, refetch: fetchSessions }
+  const deleteSession = useCallback(async (sessionId: string) => {
+    setSessions(prev => prev.filter(s => s.id !== sessionId))
+    await supabase.from("session_keywords").update({ session_id: null }).eq("session_id", sessionId)
+    await supabase.from("chat_sessions").delete().eq("id", sessionId)
+  }, [supabase])
+
+  return { sessions, isLoading, createSession, deleteSession, refetch: fetchSessions }
 }

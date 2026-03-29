@@ -3,7 +3,17 @@
 import { useState } from "react"
 import { useRouter } from "next/navigation"
 import { useChatHistory } from "@/shared/lib/use-chat-history"
-import { MessageSquare, Sparkles } from "lucide-react"
+import { MessageSquare, Sparkles, Trash2 } from "lucide-react"
+import {
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+} from "@clearity/ui"
 import { cn } from "@clearity/ui/lib/utils"
 import { PageLayout } from "@/shared/ui/page-layout"
 import { ClarifyModal } from "@/shared/ui/clarify-modal"
@@ -38,11 +48,13 @@ export function HistoryPage() {
   const router = useRouter()
   const chatHistory = useChatHistory()
   const [clarifySessionId, setClarifySessionId] = useState<string | null>(null)
+  const [deleteTargetId, setDeleteTargetId] = useState<string | null>(null)
   const [filter, setFilter] = useState<"all" | "active" | "completed">("all")
 
   const handleSelectSession = (sessionId: string) => router.push(`/chat/${sessionId}`)
 
   return (
+    <>
     <PageLayout header={<h1 className="text-xl font-bold text-zinc-800 dark:text-zinc-100">Chat History</h1>}>
       <div className="glass flex flex-col h-full !rounded-3xl p-6 overflow-y-auto">
         {/* Filter */}
@@ -80,7 +92,7 @@ export function HistoryPage() {
               <div
                 key={session.id}
                 onClick={() => session.status === "completed" ? setClarifySessionId(session.id) : handleSelectSession(session.id)}
-                className="glass-subtle !rounded-2xl p-5 text-left hover:scale-[1.005] transition-all cursor-pointer"
+                className="group glass-subtle !rounded-2xl p-5 text-left hover:scale-[1.005] transition-all cursor-pointer"
               >
                 <div className="flex items-center justify-between mb-1">
                   <span className="text-sm font-semibold text-zinc-800 dark:text-zinc-100">
@@ -101,6 +113,12 @@ export function HistoryPage() {
                     <span className="text-xs text-zinc-400">
                       {formatDate(session.updated_at)}
                     </span>
+                    <button
+                      onClick={(e) => { e.stopPropagation(); setDeleteTargetId(session.id) }}
+                      className="opacity-0 group-hover:opacity-100 p-1 rounded-lg hover:bg-red-100 dark:hover:bg-red-900/30 text-zinc-400 hover:text-red-500 transition-all"
+                    >
+                      <Trash2 className="h-3.5 w-3.5" />
+                    </button>
                   </div>
                 </div>
                 {session.preview && (
@@ -128,5 +146,26 @@ export function HistoryPage() {
         />
       )}
     </PageLayout>
+
+    <AlertDialog open={!!deleteTargetId} onOpenChange={(open) => { if (!open) setDeleteTargetId(null) }}>
+      <AlertDialogContent className="glass !fixed !rounded-2xl border-white/15">
+        <AlertDialogHeader>
+          <AlertDialogTitle>Delete this session?</AlertDialogTitle>
+          <AlertDialogDescription>
+            This chat session will be removed from your history. Your keywords will be preserved.
+          </AlertDialogDescription>
+        </AlertDialogHeader>
+        <AlertDialogFooter>
+          <AlertDialogCancel className="!rounded-xl">Cancel</AlertDialogCancel>
+          <AlertDialogAction
+            className="!rounded-xl bg-red-500 hover:bg-red-600 text-white"
+            onClick={() => { if (deleteTargetId) chatHistory.deleteSession(deleteTargetId); setDeleteTargetId(null) }}
+          >
+            Delete
+          </AlertDialogAction>
+        </AlertDialogFooter>
+      </AlertDialogContent>
+    </AlertDialog>
+    </>
   )
 }
