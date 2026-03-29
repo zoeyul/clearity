@@ -383,20 +383,7 @@ export function ReflectionDashboard() {
       chatHistory.refetch();
     }
 
-    const { data: inputData } = await supabase
-      .from("user_inputs")
-      .select("message")
-      .eq("extracted_main", keywordText)
-      .order("created_at", { ascending: false })
-      .limit(1)
-      .single();
-
-    const params = new URLSearchParams({ keyword: keywordText });
-    if (inputData?.message) {
-      params.set("context", inputData.message);
-    }
-
-    router.push(`/chat/${sessionId}?${params.toString()}`);
+    router.push(`/chat/${sessionId}?keyword=${encodeURIComponent(keywordText)}`);
   });
 
   const handleSelectSession = (sessionId: string) =>

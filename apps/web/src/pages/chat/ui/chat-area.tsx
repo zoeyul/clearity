@@ -27,7 +27,6 @@ interface ChatAreaProps {
   onFinishSession: () => Promise<unknown>
   isLoading: boolean
   keyword?: string
-  context?: string
   onToggleNotes?: () => void
   showNotes?: boolean
 }
@@ -107,7 +106,6 @@ function ChatAreaInner({
   onFinishSession,
   isLoading,
   keyword,
-  context,
   onToggleNotes,
   apiKey,
   aboutMe,
@@ -147,7 +145,6 @@ function ChatAreaInner({
   const greetingLoading = useGreeting({
     sessionId,
     keyword: headerKeyword,
-    context,
     apiKey,
     aboutMe,
     hasInitialMessages: initialMessages.length > 0,
@@ -215,7 +212,7 @@ function ChatAreaInner({
 
           await supabase
             .from("chat_sessions")
-            .update({ title: data.sessionTitle })
+            .update({ title: data.main })
             .eq("id", sessionId)
         }
       } catch {

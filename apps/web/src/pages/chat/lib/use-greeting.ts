@@ -1,20 +1,19 @@
 "use client"
 
 import { useEffect, useRef, useState } from "react"
+import { useRouter } from "next/navigation"
 import type { SupabaseClient } from "@supabase/supabase-js"
-
-const FALLBACK_GREETING = "What's been on your mind lately? No need to organize it — just start wherever feels right."
 
 type ChatMessage = { id: string; role: "assistant"; parts: { type: "text"; text: string }[] }
 
 /**
  * Generates and saves an AI greeting for fresh sessions.
  * Skips if the session already has messages.
+ * On failure: deletes session and redirects to home.
  */
 export function useGreeting({
   sessionId,
   keyword,
-  context,
   apiKey,
   aboutMe,
   hasInitialMessages,
@@ -24,7 +23,6 @@ export function useGreeting({
 }: {
   sessionId: string
   keyword: string | null
-  context?: string
   apiKey: string | null
   aboutMe: string | null
   hasInitialMessages: boolean
@@ -34,6 +32,7 @@ export function useGreeting({
 }) {
   const [isLoading, setIsLoading] = useState(!hasInitialMessages && !!(keyword || apiKey))
   const greetingSavedRef = useRef(false)
+  const router = useRouter()
 
   useEffect(() => {
     if (hasInitialMessages || greetingSavedRef.current) return
@@ -46,13 +45,26 @@ export function useGreeting({
         const res = await fetch("/api/greeting", {
           method: "POST",
           headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ keyword, context, apiKey, aboutMe }),
+          body: JSON.stringify({ keyword, apiKey, aboutMe }),
         })
+
+        if (!res.ok) {
+          await handleFailure()
+          return
+        }
+
         const { greeting } = await res.json()
         saveGreeting(greeting)
       } catch {
-        saveGreeting(FALLBACK_GREETING)
+        await handleFailure()
       }
+    }
+
+    const handleFailure = async () => {
+      setIsLoading(false)
+      await supabase.from("chat_sessions").delete().eq("id", sessionId)
+      alert("AI is currently unavailable. Please try again later.")
+      router.push("/")
     }
 
     const saveGreeting = async (text: string) => {

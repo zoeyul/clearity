@@ -10,7 +10,6 @@ const SIMILARITY_THRESHOLD = 0.8
 const ExtractionSchema = z.object({
   main: z.string().describe("The primary topic or core concern (2-4 words)"),
   subs: z.array(z.string()).describe("1-3 secondary/derivative concerns (1-3 words each)"),
-  sessionTitle: z.string().describe("A concise session title based on the main topic (2-5 words)"),
 })
 
 export async function POST(req: Request) {
@@ -45,7 +44,6 @@ Rules:
   - NEVER use clinical/generic terms like "stress", "anxiety", "worries" (or their equivalents in any language)
   - Ask yourself: "Would this person recognize this phrase and say 'yes, that's exactly what's been stuck in my head'?"
 - "subs" = 1-3 related thoughts branching from the main one, same style — raw and personal like the user's actual inner voice
-- "sessionTitle" = a concise title for this thought (2-5 words)
 - Consider the ENTIRE message equally — do NOT give extra weight to the last sentence. The main thought is often expressed throughout, not just at the end.
 - Use the same language as the user's message
 
@@ -132,7 +130,6 @@ User message: "${message}"`,
         action: "merged",
         mergedInto: matchedKeywordId,
         main: object.main,
-        sessionTitle: object.sessionTitle,
         subs: newSubs,
       })
     }
@@ -207,7 +204,6 @@ User message: "${message}"`,
       mainId: mainInserted.id,
       main: object.main,
       subs: subsInserted,
-      sessionTitle: object.sessionTitle,
     })
   } catch (error: unknown) {
     const err = error as { statusCode?: number; message?: string }

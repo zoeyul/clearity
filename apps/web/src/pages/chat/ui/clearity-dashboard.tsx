@@ -13,10 +13,9 @@ import { NOTE_PANEL_DEFAULT_WIDTH, NOTE_PANEL_MIN_WIDTH, NOTE_PANEL_MAX_WIDTH } 
 interface ClearityDashboardProps {
   sessionId: string
   keyword?: string
-  context?: string
 }
 
-export function ClearityDashboard({ sessionId, keyword, context }: ClearityDashboardProps) {
+export function ClearityDashboard({ sessionId, keyword }: ClearityDashboardProps) {
   const router = useRouter()
   const supabase = createClient()
   const chatHistory = useChatHistory()
@@ -106,7 +105,6 @@ export function ClearityDashboard({ sessionId, keyword, context }: ClearityDashb
             onFinishSession={session.finishSession}
             isLoading={session.isLoading}
             keyword={keyword}
-            context={context}
             onToggleNotes={() => setShowNotes(!showNotes)}
             showNotes={showNotes}
           />
